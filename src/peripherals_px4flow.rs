@@ -28,7 +28,7 @@ pub fn setup_peripherals() -> (
     ),
     impl DelayMs<u8>,
     I2C1PortType,
-    Spi1PortType,
+    // Spi1PortType,
     Spi2PortType,
     SpiGyroCsn,
 ) {
@@ -69,20 +69,19 @@ pub fn setup_peripherals() -> (
         p_hal::i2c::I2c::i2c1(dp.I2C1, (scl, sda), 400.khz(), clocks)
     };
 
-    let spi1_port = {
-        let sck = gpioa.pa5.into_alternate_af5();
-        let miso = gpioa.pa6.into_alternate_af5();
-        let mosi = gpioa.pa7.into_alternate_af5();
-
-        p_hal::spi::Spi::spi1(
-            dp.SPI1,
-            (sck, miso, mosi),
-            embedded_hal::spi::MODE_3,
-            8_000_000.hz(),
-            clocks,
-        )
-    };
-
+    // let spi1_port = {
+    //     let sck = gpioa.pa5.into_alternate_af5();
+    //     let miso = gpioa.pa6.into_alternate_af5();
+    //     let mosi = gpioa.pa7.into_alternate_af5();
+    //
+    //     p_hal::spi::Spi::spi1(
+    //         dp.SPI1,
+    //         (sck, miso, mosi),
+    //         embedded_hal::spi::MODE_3,
+    //         8_000_000.hz(),
+    //         clocks,
+    //     )
+    // };
 
     let spi2_port = {
         let sck = gpiob.pb13.into_alternate_af5();
@@ -107,7 +106,7 @@ pub fn setup_peripherals() -> (
         (user_led1, user_led2, user_led3),
         delay_source,
         i2c1_port,
-        spi1_port,
+        // spi1_port,
         spi2_port,
         spi_cs_gyro,
     )

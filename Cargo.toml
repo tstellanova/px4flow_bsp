@@ -20,6 +20,7 @@ l3gd20 = "0.2.0"
 [dev-dependencies]
 cortex-m-rt = "0.6.12"
 shared-bus = {version="0.1.4", features=["cortexm"] }
+panic-rtt-core = "0.1.1"
 
 [features]
 default = []
