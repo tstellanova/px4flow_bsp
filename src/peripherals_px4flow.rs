@@ -12,7 +12,7 @@ use embedded_hal::blocking::delay::DelayMs;
 use embedded_hal::digital::v2::{OutputPin, ToggleableOutputPin};
 use p_hal::gpio::GpioExt;
 use p_hal::rcc::RccExt;
-use p_hal::time::{Hertz, U32Ext};
+use p_hal::time::{U32Ext};
 
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
@@ -52,7 +52,7 @@ pub fn setup_peripherals() -> (
     // let pclk1 = clocks.pclk1();
     // rprintln!("hclk: {} /16: {} pclk1: {} rng_clk: {}", hclk.0, hclk.0 / 16, pclk1.0, pll48clk.0);
 
-    let gpioa = dp.GPIOA.split();
+    // let gpioa = dp.GPIOA.split();
     let gpiob = dp.GPIOB.split();
     // let gpioc = dp.GPIOC.split();
     // let gpiod = dp.GPIOD.split();
@@ -92,7 +92,7 @@ pub fn setup_peripherals() -> (
             dp.SPI2,
             (sck, miso, mosi),
             embedded_hal::spi::MODE_3,
-            20_000_000.hz(),
+            1_000_000.hz(),
             clocks,
         )
     };
@@ -100,7 +100,6 @@ pub fn setup_peripherals() -> (
     // SPI chip select
     let mut spi_cs_gyro = gpiob.pb12.into_push_pull_output();
     let _ = spi_cs_gyro.set_high();
-
 
     (
         (user_led1, user_led2, user_led3),

@@ -9,21 +9,22 @@ LICENSE: BSD3 (see LICENSE file)
 use cortex_m_rt as rt;
 use rt::entry;
 
-use panic_rtt_core::{self, rprintln, rprint, rtt_init_print};
+use panic_rtt_core::{self, rprintln, rtt_init_print};
 
 use embedded_hal::blocking::delay::DelayMs;
 use embedded_hal::digital::v2::OutputPin;
 use embedded_hal::digital::v2::ToggleableOutputPin;
-use embedded_hal::PwmPin;
+use embedded_hal::digital::{v1_compat::OldOutputPin};
 
-const GYRO_REPORTING_RATE_HZ: u16 = 200;
-const GYRO_REPORTING_INTERVAL_MS: u16 = (1000 / GYRO_REPORTING_RATE_HZ);
+const GYRO_REPORTING_RATE_HZ: u16 = 380;
+const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 
 use l3gd20::L3gd20;
 
 use px4flow_bsp::peripherals;
+use px4flow_bsp::peripherals_px4flow::{Spi2PortType, SpiGyroCsn};
 
-use peripherals::{Spi2PortType, SpiGyroCsn};
+// use peripherals::{Spi2PortType, SpiGyroCsn};
 
 
 #[entry]
@@ -41,11 +42,12 @@ fn main() -> ! {
     ) = peripherals::setup_peripherals();
 
     // let spi_bus1 = shared_bus::CortexMBusManager::new(spi1_port);
-    let spi_bus2 = shared_bus::CortexMBusManager::new(spi2_port);
+    // let spi_bus2 = shared_bus::CortexMBusManager::new(spi2_port);
     let _i2c_bus1 = shared_bus::CortexMBusManager::new(i2c1_port);
 
-    let mut gyro_opt = None;
-    if let Ok(mut gyro) = L3gd20::new(spi_bus2, spi_cs_gyro) {
+    let old_gyro_csn = OldOutputPin::new(spi_cs_gyro);
+    let mut gyro_opt: Option<GyroType> = None;
+    if let Ok(mut gyro) = L3gd20::new(spi2_port, old_gyro_csn) {
         if let Ok(device_id) = gyro.who_am_i() {
             if device_id == 0xD4 {
                 gyro_opt = Some(gyro)
@@ -77,4 +79,7 @@ fn main() -> ! {
         //let _ = user_leds.2.toggle();
     }
 }
+
+
+type GyroType = L3gd20<Spi2PortType, OldOutputPin<SpiGyroCsn>>;
 
