@@ -139,27 +139,7 @@ pub type Spi2PortType = p_hal::spi::Spi<
     ),
 >;
 
+/// chip select pin for Gyro
 pub type SpiGyroCsn =    p_hal::gpio::gpiob::PB12<p_hal::gpio::Output<p_hal::gpio::PushPull>>;
-
-// pub type SpiPinsImu = (
-//     p_hal::gpio::gpioc::PC2<p_hal::gpio::Output<p_hal::gpio::PushPull>>,
-//     p_hal::gpio::gpiod::PD15<p_hal::gpio::Input<p_hal::gpio::PullUp>>,
-// );
-// pub type SpiPins6Dof = (
-//     p_hal::gpio::gpioc::PC15<p_hal::gpio::Output<p_hal::gpio::PushPull>>,
-//     p_hal::gpio::gpioc::PC14<p_hal::gpio::Input<p_hal::gpio::PullUp>>,
-// );
-// pub type SpiPinsMag = (
-//     p_hal::gpio::gpioe::PE15<p_hal::gpio::Output<p_hal::gpio::PushPull>>,
-//     p_hal::gpio::gpioe::PE12<p_hal::gpio::Input<p_hal::gpio::PullUp>>,
-// );
-
-// pub type SpiCsBaro =
-//     p_hal::gpio::gpiod::PD7<p_hal::gpio::Output<p_hal::gpio::PushPull>>;
-// pub type SpiCsFram =
-//     p_hal::gpio::gpiod::PD10<p_hal::gpio::Output<p_hal::gpio::PushPull>>;
-
-// pub type Spi1PowerEnable =
-//     p_hal::gpio::gpioe::PE3<p_hal::gpio::Output<p_hal::gpio::PushPull>>;
 
 

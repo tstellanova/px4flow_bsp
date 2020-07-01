@@ -22,9 +22,6 @@ const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 use l3gd20::L3gd20;
 
 use px4flow_bsp::peripherals;
-use px4flow_bsp::peripherals_px4flow::{Spi2PortType, SpiGyroCsn};
-
-// use peripherals::{Spi2PortType, SpiGyroCsn};
 
 
 #[entry]
@@ -42,12 +39,12 @@ fn main() -> ! {
     ) = peripherals::setup_peripherals();
 
     // let spi_bus1 = shared_bus::CortexMBusManager::new(spi1_port);
-    // let spi_bus2 = shared_bus::CortexMBusManager::new(spi2_port);
+    let spi_bus2 = shared_bus::CortexMBusManager::new(spi2_port);
     let _i2c_bus1 = shared_bus::CortexMBusManager::new(i2c1_port);
 
     let old_gyro_csn = OldOutputPin::new(spi_cs_gyro);
-    let mut gyro_opt: Option<GyroType> = None;
-    if let Ok(mut gyro) = L3gd20::new(spi2_port, old_gyro_csn) {
+    let mut gyro_opt: Option<_> = None;
+    if let Ok(mut gyro) = L3gd20::new(spi_bus2.acquire(), old_gyro_csn) {
         if let Ok(device_id) = gyro.who_am_i() {
             if device_id == 0xD4 {
                 gyro_opt = Some(gyro)
@@ -80,6 +77,4 @@ fn main() -> ! {
     }
 }
 
-
-type GyroType = L3gd20<Spi2PortType, OldOutputPin<SpiGyroCsn>>;
 
