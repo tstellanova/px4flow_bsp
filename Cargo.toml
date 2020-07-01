@@ -1,0 +1,27 @@
+[package]
+name = "px4flow_bsp"
+version = "0.1.0"
+authors = ["Todd Stellanova <tstellanova@users.noreply.github.com>"]
+edition = "2018"
+description = "A board support package for the PX4FLOW optical flow sensor board"
+
+[dependencies]
+cortex-m = "0.6.2"
+embedded-hal = { version = "0.2.3", features = ["unproven"] }
+panic-rtt-core = {version="0.1.1", optional=true}
+
+#stm32f4 = {version = "0.11", features = ["stm32f427"]  }
+#stm32f4xx-hal = { git = "https://github.com/stm32-rs/stm32f4xx-hal", features = ["stm32f427", "rt"] }
+stm32f4xx-hal = {version="0.8.3",  features = ["stm32f407", "rt"] }
+# Gyro
+l3gd20 = "0.2.0"
+
+
+[dev-dependencies]
+cortex-m-rt = "0.6.12"
+shared-bus = {version="0.1.4", features=["cortexm"] }
+
+[features]
+default = []
+rttdebug = ["panic-rtt-core"]
+
