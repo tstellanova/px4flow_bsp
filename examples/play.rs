@@ -33,9 +33,11 @@ fn main() -> ! {
         mut user_leds,
         mut delay_source,
         i2c1_port,
-        // spi1_port,
+        _i2c2_port,
         spi2_port,
-        spi_cs_gyro
+        spi_cs_gyro,
+        _dcmi_ctrl_pins,
+        _dmci_data_pins,
     ) = peripherals::setup_peripherals();
 
     // let spi_bus1 = shared_bus::CortexMBusManager::new(spi1_port);

@@ -6,7 +6,6 @@ LICENSE: BSD3 (see LICENSE file)
 use stm32f4xx_hal as p_hal;
 
 use p_hal::stm32 as pac;
-use p_hal::stm32::I2C1;
 
 use embedded_hal::blocking::delay::DelayMs;
 use embedded_hal::digital::v2::{OutputPin, ToggleableOutputPin};
@@ -28,8 +27,9 @@ pub fn setup_peripherals() -> (
         impl OutputPin + ToggleableOutputPin,
     ),
     impl DelayMs<u8>,
-    I2C1PortType,
-    Spi2PortType,
+    I2c1Port,
+    I2c2Port,
+    Spi2Port,
     SpiGyroCsn,
     DcmiCtrlPins,
     DcmiDataPins,
@@ -65,12 +65,21 @@ pub fn setup_peripherals() -> (
     let user_led2 = gpioe.pe3.into_push_pull_output(); //blue
     let user_led3 = gpioe.pe7.into_push_pull_output(); //red
 
+    //used for eg external (offboard) communication
     let i2c1_port = {
         let scl = gpiob.pb8.into_alternate_af4().set_open_drain();
         let sda = gpiob.pb9.into_alternate_af4().set_open_drain();
-        p_hal::i2c::I2c::i2c1(dp.I2C1, (scl, sda), 1000.khz(), clocks)
+        p_hal::i2c::I2c::i2c1(dp.I2C1, (scl, sda), 400.khz(), clocks)
     };
 
+    //used for eg MT9V034 configuration
+    let i2c2_port = {
+        let scl = gpiob.pb10.into_alternate_af4().set_open_drain();
+        let sda = gpiob.pb11.into_alternate_af4().set_open_drain();
+        p_hal::i2c::I2c::i2c2(dp.I2C2, (scl, sda), 1000.khz(), clocks)
+    };
+
+    // used for gyro
     let spi2_port = {
         let sck = gpiob.pb13.into_alternate_af5();
         let miso = gpiob.pb14.into_alternate_af5();
@@ -91,7 +100,7 @@ pub fn setup_peripherals() -> (
 
     // DCMI control pins
     let dcmi_ctrl_pins = {
-        let pixck = gpioa.pa6 // DCMI_PIXCK 
+        let pixck = gpioa.pa6 // DCMI_PIXCK
             .into_alternate_af13()
             .internal_pull_up(true)
             .set_speed(Speed::High) //TODO s/b 100 MHz Pullup
@@ -122,7 +131,6 @@ pub fn setup_peripherals() -> (
         gpioe.pe6.into_alternate_af13(), // DCMI_D7
         gpioc.pc10.into_alternate_af13(), // DCMI_D8
         gpioc.pc12.into_alternate_af13(), // DCMI_D9
-        gpiob.pb5.into_alternate_af13(), // DCMI_D10 //TODO verify -- unused?
     );
 
 
@@ -130,6 +138,7 @@ pub fn setup_peripherals() -> (
         (user_led1, user_led2, user_led3),
         delay_source,
         i2c1_port,
+        i2c2_port,
         spi2_port,
         spi_cs_gyro,
         dcmi_ctrl_pins,
@@ -137,16 +146,23 @@ pub fn setup_peripherals() -> (
     )
 }
 
-pub type I2C1PortType = p_hal::i2c::I2c<
-    I2C1,
+pub type I2c1Port = p_hal::i2c::I2c<
+    pac::I2C1,
     (
         p_hal::gpio::gpiob::PB8<p_hal::gpio::AlternateOD<p_hal::gpio::AF4>>,
         p_hal::gpio::gpiob::PB9<p_hal::gpio::AlternateOD<p_hal::gpio::AF4>>,
     ),
 >;
 
+pub type I2c2Port = p_hal::i2c::I2c<
+    pac::I2C2,
+    (
+        p_hal::gpio::gpiob::PB10<p_hal::gpio::AlternateOD<p_hal::gpio::AF4>>,
+        p_hal::gpio::gpiob::PB11<p_hal::gpio::AlternateOD<p_hal::gpio::AF4>>,
+    ),
+>;
 
-pub type Spi2PortType = p_hal::spi::Spi<
+pub type Spi2Port = p_hal::spi::Spi<
     pac::SPI2,
     (
         p_hal::gpio::gpiob::PB13<p_hal::gpio::Alternate<p_hal::gpio::AF5>>, //SCLK
@@ -171,16 +187,15 @@ pub type DcmiCtrlPins = (
 );
 
 pub type DcmiDataPins = (
-    p_hal::gpio::gpioc::PC6<p_hal::gpio::Alternate<p_hal::gpio::AF13>>,
-    p_hal::gpio::gpioc::PC7<p_hal::gpio::Alternate< p_hal::gpio::AF13>>,
-    p_hal::gpio::gpioe::PE0<p_hal::gpio::Alternate<p_hal::gpio::AF13>>,
-    p_hal::gpio::gpioe::PE1<p_hal::gpio::Alternate<p_hal::gpio::AF13>>,
-    p_hal::gpio::gpioe::PE4<p_hal::gpio::Alternate<p_hal::gpio::AF13>>,
-    p_hal::gpio::gpiob::PB6<p_hal::gpio::Alternate<p_hal::gpio::AF13>>,
-    p_hal::gpio::gpioe::PE5<p_hal::gpio::Alternate<p_hal::gpio::AF13>>,
-    p_hal::gpio::gpioe::PE6<p_hal::gpio::Alternate<p_hal::gpio::AF13>>,
-    p_hal::gpio::gpioc::PC10<p_hal::gpio::Alternate<p_hal::gpio::AF13>>,
-    p_hal::gpio::gpioc::PC12<p_hal::gpio::Alternate<p_hal::gpio::AF13>>,
-    p_hal::gpio::gpiob::PB5<p_hal::gpio::Alternate<p_hal::gpio::AF13>>,
+    p_hal::gpio::gpioc::PC6<p_hal::gpio::Alternate<p_hal::gpio::AF13>>,  // D0
+    p_hal::gpio::gpioc::PC7<p_hal::gpio::Alternate< p_hal::gpio::AF13>>, // D1
+    p_hal::gpio::gpioe::PE0<p_hal::gpio::Alternate<p_hal::gpio::AF13>>,  // D2
+    p_hal::gpio::gpioe::PE1<p_hal::gpio::Alternate<p_hal::gpio::AF13>>,  // D3
+    p_hal::gpio::gpioe::PE4<p_hal::gpio::Alternate<p_hal::gpio::AF13>>,  // D4
+    p_hal::gpio::gpiob::PB6<p_hal::gpio::Alternate<p_hal::gpio::AF13>>,  // D5
+    p_hal::gpio::gpioe::PE5<p_hal::gpio::Alternate<p_hal::gpio::AF13>>,  // D6
+    p_hal::gpio::gpioe::PE6<p_hal::gpio::Alternate<p_hal::gpio::AF13>>,  // D7
+    p_hal::gpio::gpioc::PC10<p_hal::gpio::Alternate<p_hal::gpio::AF13>>, // D8
+    p_hal::gpio::gpioc::PC12<p_hal::gpio::Alternate<p_hal::gpio::AF13>>, // D9
 );
 
