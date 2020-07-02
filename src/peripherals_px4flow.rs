@@ -61,9 +61,9 @@ pub fn setup_peripherals() -> (
     let gpioe = dp.GPIOE.split();
 
 
-    let user_led1 = gpioe.pe2.into_push_pull_output(); //amber
-    let user_led2 = gpioe.pe3.into_push_pull_output(); //blue
-    let user_led3 = gpioe.pe7.into_push_pull_output(); //red
+    let user_led0 = gpioe.pe2.into_push_pull_output(); //amber
+    let user_led1 = gpioe.pe3.into_push_pull_output(); //blue
+    let user_led2 = gpioe.pe7.into_push_pull_output(); //red
 
     //used for eg external (offboard) communication
     let i2c1_port = {
@@ -135,7 +135,7 @@ pub fn setup_peripherals() -> (
 
 
     (
-        (user_led1, user_led2, user_led3),
+        (user_led0, user_led1, user_led2),
         delay_source,
         i2c1_port,
         i2c2_port,

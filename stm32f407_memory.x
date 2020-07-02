@@ -5,7 +5,7 @@ MEMORY
   /* FLASH and RAM are mandatory memory regions */
 
   /* NOTE flash actually starts at 0x08000000
-  but we leave space for the PX4 bootloader */
+  but we reserve space for the default PX4 bootloader */
   BLFLASH :   ORIGIN = 0x08000000, LENGTH = 16K
   FLASH  :    ORIGIN = 0x08004000, LENGTH = 1008K
   CCSRAM :    ORIGIN = 0x10000000, LENGTH = 64K

@@ -61,21 +61,24 @@ fn main() -> ! {
     rprintln!("loop_interval: {}", loop_interval);
 
     let _ = user_leds.0.set_high();
-    let _ = user_leds.1.set_low();
+    let _ = user_leds.1.set_high();
     let _ = user_leds.2.set_high();
 
     loop {
-
-        if gyro_opt.is_some() {
-            if let Ok(sample) = gyro_opt.as_mut().unwrap().gyro() {
-                rprintln!("gyro {}, {}, {}", sample.x, sample.y, sample.z);
+        for _ in 0..10 {
+            for _ in 0..10 {
+                for _ in 0..10 {
+                    if gyro_opt.is_some() {
+                        if let Ok(sample) = gyro_opt.as_mut().unwrap().gyro() {
+                            rprintln!("gyro {}, {}, {}", sample.x, sample.y, sample.z);
+                        }
+                    }
+                    let _ = user_leds.0.toggle(); //amber
+                }
             }
+            let _ = user_leds.1.toggle(); //blue
         }
-
-
-        let _ = user_leds.0.toggle();
-        let _ = user_leds.1.toggle();
-        //let _ = user_leds.2.toggle();
+        let _ = user_leds.2.toggle(); //red
     }
 }
 

@@ -4,6 +4,8 @@ version = "0.1.0"
 authors = ["Todd Stellanova <tstellanova@users.noreply.github.com>"]
 edition = "2018"
 description = "A board support package for the PX4FLOW optical flow sensor board"
+license = "BSD-3-Clause"
+repository = "https://github.com/tstellanova/px4flow_bsp"
 
 [dependencies]
 cortex-m = "0.6.2"
