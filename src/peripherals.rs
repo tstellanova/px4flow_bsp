@@ -21,16 +21,13 @@ use l3gd20::L3gd20;
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
 use core::borrow::BorrowMut;
+use stm32f4xx_hal::gpio::{Output, PushPull};
 
 /// Initialize peripherals for Pixracer.
 /// Pixracer chip is [STM32F407VGT6](https://www.mouser.com/datasheet/2/389/dm00037051-1797298.pdf)
 pub fn setup_peripherals() -> (
     //  user LEDs:
-    (
-        impl OutputPin + ToggleableOutputPin,
-        impl OutputPin + ToggleableOutputPin,
-        impl OutputPin + ToggleableOutputPin,
-    ),
+    ( LedOutputPin, LedOutputPin, LedOutputPin ),
     impl DelayMs<u8>,
     I2c1Port,
     I2c2Port,
@@ -66,9 +63,9 @@ pub fn setup_peripherals() -> (
     let gpioe = dp.GPIOE.split();
 
 
-    let user_led0 = gpioe.pe2.into_push_pull_output(); //amber
-    let user_led1 = gpioe.pe3.into_push_pull_output(); //blue
-    let user_led2 = gpioe.pe7.into_push_pull_output(); //red
+    let user_led0 = gpioe.pe2.into_push_pull_output().downgrade(); //amber
+    let user_led1 = gpioe.pe3.into_push_pull_output().downgrade(); //blue
+    let user_led2 = gpioe.pe7.into_push_pull_output().downgrade(); //red
 
     //used for eg external (offboard) communication
     let i2c1_port = {
@@ -246,11 +243,13 @@ pub type DcmiDataPins = (
 
 pub type GyroType = l3gd20::L3gd20<Spi2Port, OldOutputPin<SpiGyroCsn>>;
 
+pub type LedOutputPin = p_hal::gpio::gpioe::PE<Output<PushPull>>;
 
 pub struct Board {
-    external_i2c1: I2c1Port,
-    internal_i2c2: I2c2Port,
-    gyro: Option<GyroType>,
+    pub external_i2c1: I2c1Port,
+    pub internal_i2c2: I2c2Port,
+    pub gyro_opt: Option<GyroType>,
+    pub user_leds: [LedOutputPin; 3],
 }
 
 impl Board {
@@ -258,7 +257,7 @@ impl Board {
     pub fn new() -> Self {
 
         let (
-            _user_leds,
+            raw_user_leds,
             _delay_source,
             i2c1_port,
             i2c2_port,
@@ -282,10 +281,17 @@ impl Board {
             }
         }
 
+
         Self {
             external_i2c1: i2c1_port,
             internal_i2c2: i2c2_port,
-            gyro: gyro_opt,
+            gyro_opt: gyro_opt,
+            user_leds: [
+                raw_user_leds.0,
+                raw_user_leds.1,
+                raw_user_leds.2
+            ],
+
         }
     }
 
