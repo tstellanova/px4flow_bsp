@@ -4,14 +4,16 @@ LICENSE: BSD3 (see LICENSE file)
 */
 
 use stm32f4xx_hal as p_hal;
-
 use p_hal::stm32 as pac;
 
 use pac::{DCMI, RCC};
 
 use embedded_hal::blocking::delay::DelayMs;
 use embedded_hal::digital::v2::{OutputPin, ToggleableOutputPin};
-use p_hal::gpio::{GpioExt, Speed};
+// use embedded_hal::timer::Cancel;
+use p_hal::timer::{self, Timer};
+
+use p_hal::gpio::{GpioExt, Output, PushPull, Speed};
 use p_hal::rcc::RccExt;
 use p_hal::time::{U32Ext};
 // use shared_bus::CortexMBusManager;
@@ -21,10 +23,10 @@ use l3gd20::L3gd20;
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
 use core::borrow::BorrowMut;
-use stm32f4xx_hal::gpio::{Output, PushPull};
+use stm32f4xx_hal::timer::{PinC3, PinC4};
 
-/// Initialize peripherals for Pixracer.
-/// Pixracer chip is [STM32F407VGT6](https://www.mouser.com/datasheet/2/389/dm00037051-1797298.pdf)
+/// Initialize peripherals for PX4FLOW.
+/// PX4FLOW v2.3 chip is [STM32F407VGT6](https://www.mouser.com/datasheet/2/389/dm00037051-1797298.pdf)
 pub fn setup_peripherals() -> (
     //  user LEDs:
     ( LedOutputPin, LedOutputPin, LedOutputPin ),
@@ -144,9 +146,23 @@ pub fn setup_peripherals() -> (
     let _exposure_line = gpioa.pa2.into_push_pull_output().set_speed(Speed::Medium);
     let _standby_line = gpioa.pa3.into_push_pull_output().set_speed(Speed::Medium);
     //TODO wire timers to exposure and standby lines:
-    // TIM5_CH3_EXPOSURE
-    // TIM5_CH4_STANDBY
+    // TIM5_CH3_EXPOSURE PA2
+    // TIM5_CH4_STANDBY PA3
 
+    let mut tim5 = Timer::tim5(dp.TIM5, 1.hz(), clocks);
+    let tim5_ch3: PinC3<TIM5> = tim5;
+    let tim5_ch4: PinC4<TIM5> = tim5;
+
+
+    //supply clock to MT9V034 (TIM8_CH3_MASTERCLOCK)
+    //s/b 100 MHz
+    let _masterclock_line = gpioc.pc8.into_push_pull_output().internal_pull_up(true).set_speed(Speed::High);
+    let mut tim8 = Timer::tim8(dp.TIM8, 1.hz(), clocks);
+    let mut tim8_ch3: PinC3<TIM8> = tim8;
+    tim8_ch3.start();
+
+//	/* Connect TIM3 pins to AF2 */;
+// 	GPIO_PinAFConfig(GPIOC, GPIO_PinSource8, GPIO_AF_TIM3);
 
     // configure DCMI for continuous capture
     // NOTE(unsafe) This executes only during initialization
