@@ -146,6 +146,10 @@ pub fn setup_peripherals() -> (
     //configure GPIOA2, GPIOA3 as EXPOSURE and STANDBY PP output lines 2MHz
     let _exposure_line = gpioa.pa2.into_push_pull_output().set_speed(Speed::Medium);
     let _standby_line = gpioa.pa3.into_push_pull_output().set_speed(Speed::Medium);
+    //TODO wire timers to exposure and standby lines:
+    // TIM5_CH3_EXPOSURE
+    // TIM5_CH4_STANDBY
+
 
     // configure DCMI for continuous capture
     // NOTE(unsafe) This executes only during initialization
