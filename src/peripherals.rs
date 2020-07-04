@@ -10,7 +10,7 @@ use pac::{DCMI, RCC};
 
 use embedded_hal::blocking::delay::DelayMs;
 use embedded_hal::digital::v2::{OutputPin, ToggleableOutputPin};
-// use embedded_hal::timer::Cancel;
+use embedded_hal::timer::CountDown;
 use p_hal::timer::{self, Timer};
 
 use p_hal::gpio::{GpioExt, Output, PushPull, Speed};
@@ -106,18 +106,20 @@ pub fn setup_peripherals() -> (
     let dcmi_ctrl_pins = {
         let pixck = gpioa.pa6 // DCMI_PIXCK
             .into_alternate_af13()
-            .internal_pull_up(true) //TODO necessary?
-            .set_speed(Speed::High) //TODO s/b 100 MHz Pullup
+            .internal_pull_up(true)
+            .set_speed(Speed::VeryHigh) // 100 MHz Pullup
             .into_pull_up_input();
 
         let hsync = gpioa.pa4 // DCMI_HSYNC
             .into_alternate_af13()
-            .internal_pull_up(true) //TODO necessary?
-            .set_speed(Speed::High) //TODO s/b 100 MHz Pullup
+            .internal_pull_up(true)
+            .set_speed(Speed::VeryHigh) // s/b 100 MHz Pullup
             .into_pull_up_input();
 
         let vsync = gpiob.pb7 // DCMI_VSYNC
             .into_alternate_af13()
+            .internal_pull_up(true)
+            .set_speed(Speed::VeryHigh) //s/b 100 MHz Pullup
             .into_pull_up_input();
 
         (
@@ -143,23 +145,32 @@ pub fn setup_peripherals() -> (
     );
 
     //configure GPIOA2, GPIOA3 as EXPOSURE and STANDBY PP output lines 2MHz
-    let _exposure_line = gpioa.pa2.into_push_pull_output().set_speed(Speed::Medium);
-    let _standby_line = gpioa.pa3.into_push_pull_output().set_speed(Speed::Medium);
-    //TODO wire timers to exposure and standby lines:
-    // TIM5_CH3_EXPOSURE PA2
-    // TIM5_CH4_STANDBY PA3
+    let _exposure_line = gpioa.pa2 // TIM5_CH3_EXPOSURE
+        .into_alternate_af2() // AF2 -> TIM5_CH3
+        .into_push_pull_output()
+        .set_speed(Speed::Low);
+    let _standby_line = gpioa.pa3 // TIM5_CH4_STANDBY
+        .into_alternate_af2() // AF2 -> TIM5_CH4
+        .into_push_pull_output()
+        .set_speed(Speed::Low);
 
-    let mut tim5 = Timer::tim5(dp.TIM5, 1.hz(), clocks);
-    let tim5_ch3: PinC3<TIM5> = tim5;
-    let tim5_ch4: PinC4<TIM5> = tim5;
+    let mut tim5 = Timer::tim5(dp.TIM5, 2.mhz(), clocks);
+    tim5.start(2.mhz());
+    core::mem::forget(tim5);
 
+    // TODO this config is incorrect
+    // Supply clock to MT9V034:
+    // PX4FLOW schematic is marked TIM8_CH3_MASTERCLOCK, but this is a typo:
+    // actually we use TIM3 CH3  TIM8_CH3
+    let _masterclock_line = gpioc.pc8
+        .into_alternate_af2() // select TIM3 with AF2
+        .internal_pull_up(true)
+        .into_push_pull_output()
+        .set_speed(Speed::VeryHigh); //s/b 100 MHz
+    let mut tim3 = Timer::tim3(dp.TIM3, 56.mhz(), clocks);
+    tim3.start(56.mhz());
+    core::mem::forget(tim3);
 
-    //supply clock to MT9V034 (TIM8_CH3_MASTERCLOCK)
-    //s/b 100 MHz
-    let _masterclock_line = gpioc.pc8.into_push_pull_output().internal_pull_up(true).set_speed(Speed::High);
-    let mut tim8 = Timer::tim8(dp.TIM8, 1.hz(), clocks);
-    let mut tim8_ch3: PinC3<TIM8> = tim8;
-    tim8_ch3.start();
 
 //	/* Connect TIM3 pins to AF2 */;
 // 	GPIO_PinAFConfig(GPIOC, GPIO_PinSource8, GPIO_AF_TIM3);
