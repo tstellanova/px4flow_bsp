@@ -106,22 +106,28 @@ pub fn setup_peripherals() -> (
             .into_alternate_af13()
             .internal_pull_up(true)
             .set_speed(Speed::High) //TODO s/b 100 MHz Pullup
-            .into_push_pull_output();
+            .into_pull_up_input();
+
 
         let hsync = gpioa.pa4 // DCMI_HSYNC
             .into_alternate_af13()
             .internal_pull_up(true)
             .set_speed(Speed::High) //TODO s/b 100 MHz Pullup
-            .into_push_pull_output();
+            .into_pull_up_input();
+
+        let vsync = gpiob.pb7 // DCMI_VSYNC
+            .into_alternate_af13()
+            .into_pull_up_input();
 
         (
             pixck,
             hsync,
-            gpiob.pb7.into_alternate_af13(), // DCMI_VSYNC
+            vsync,
         )
     };
 
     // DCMI digital camera interface pins (AF13)
+    // this board supports ten parallel lines D0-D9
     let dcmi_data_pins = (
         gpioc.pc6.into_alternate_af13(), // DCMI_D0
         gpioc.pc7.into_alternate_af13(), // DCMI_D1
@@ -183,9 +189,9 @@ pub type SpiGyroCsn =  p_hal::gpio::gpiob::PB12<p_hal::gpio::Output<p_hal::gpio:
 /// - horizontal synchronization line, DCMI_HSYNC,
 /// - vertical synchronization line,  DCMI_VSYNC, with a programmable polarity.
 pub type DcmiCtrlPins = (
-    p_hal::gpio::gpioa::PA6<p_hal::gpio::Output<p_hal::gpio::PushPull>>, //DCMI_PIXCK
-    p_hal::gpio::gpioa::PA4<p_hal::gpio::Output<p_hal::gpio::PushPull>>, //DCMI_HSYNC
-    p_hal::gpio::gpiob::PB7<p_hal::gpio::Alternate<p_hal::gpio::AF13>>, //DCMI_VSYNC
+    p_hal::gpio::gpioa::PA6<p_hal::gpio::Input<p_hal::gpio::PullUp>>, //DCMI_PIXCK
+    p_hal::gpio::gpioa::PA4<p_hal::gpio::Input<p_hal::gpio::PullUp>>, //DCMI_HSYNC
+    p_hal::gpio::gpiob::PB7<p_hal::gpio::Input<p_hal::gpio::PullUp>>, //DCMI_VSYNC
 );
 
 pub type DcmiDataPins = (

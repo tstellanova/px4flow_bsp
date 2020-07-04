@@ -5,4 +5,5 @@ LICENSE: BSD3 (see LICENSE file)
 
 #![no_std]
 
+#[allow(unused)]
 pub mod peripherals;
