@@ -9,7 +9,9 @@ repository = "https://github.com/tstellanova/px4flow_bsp"
 
 [dependencies]
 cortex-m = "0.6.2"
+bare-metal = "1.0.0"
 embedded-hal = { version = "0.2.3", features = ["unproven"] }
+shared-bus = {version="0.1.4", features=["cortexm"] }
 panic-rtt-core = {version="0.1.1", optional=true}
 
 #stm32f4 = {version = "0.11", features = ["stm32f427"]  }
@@ -21,7 +23,6 @@ l3gd20 = "0.2.0"
 
 [dev-dependencies]
 cortex-m-rt = "0.6.12"
-shared-bus = {version="0.1.4", features=["cortexm"] }
 panic-rtt-core = "0.1.1"
 
 [features]

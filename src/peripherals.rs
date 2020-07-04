@@ -9,13 +9,15 @@ use p_hal::stm32 as pac;
 
 use embedded_hal::blocking::delay::DelayMs;
 use embedded_hal::digital::v2::{OutputPin, ToggleableOutputPin};
-use p_hal::gpio::GpioExt;
+use p_hal::gpio::{GpioExt, Speed};
 use p_hal::rcc::RccExt;
 use p_hal::time::{U32Ext};
+// use shared_bus::CortexMBusManager;
+use embedded_hal::digital::{v1_compat::OldOutputPin};
+use l3gd20::L3gd20;
 
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
-use stm32f4xx_hal::gpio::Speed;
 
 /// Initialize peripherals for Pixracer.
 /// Pixracer chip is [STM32F407VGT6](https://www.mouser.com/datasheet/2/389/dm00037051-1797298.pdf)
@@ -199,3 +201,60 @@ pub type DcmiDataPins = (
     p_hal::gpio::gpioc::PC12<p_hal::gpio::Alternate<p_hal::gpio::AF13>>, // D9
 );
 
+pub type GyroType = l3gd20::L3gd20<Spi2Port, OldOutputPin<SpiGyroCsn>>;
+
+// l3gd20::L3gd20<stm32f4xx_hal::spi::Spi<
+//     stm32f4::stm32f407::SPI2,
+//     (stm32f4xx_hal::gpio::gpiob::PB13<stm32f4xx_hal::gpio::Alternate<stm32f4xx_hal::gpio::AF5>>,
+//     stm32f4xx_hal::gpio::gpiob::PB14<stm32f4xx_hal::gpio::Alternate<stm32f4xx_hal::gpio::AF5>>,
+//     stm32f4xx_hal::gpio::gpiob::PB15<stm32f4xx_hal::gpio::Alternate<stm32f4xx_hal::gpio::AF5>>)>,
+//
+//     embedded_hal::digital::v1_compat::OldOutputPin<stm32f4xx_hal::gpio::gpiob::PB12<stm32f4xx_hal::gpio::Output<stm32f4xx_hal::gpio::PushPull>>>>
+//
+
+
+// pub type ExternalI2c1Bus = shared_bus::proxy::BusManager<bare_metal::Mutex<core::cell::RefCell<I2c1Port>>, I2c1Port>;
+
+
+pub struct Board {
+    external_i2c1: I2c1Port,
+    internal_i2c2: I2c2Port,
+    gyro: Option<GyroType>,
+}
+
+impl Board {
+
+    pub fn new() -> Self {
+
+        let (
+            _user_leds,
+            _delay_source,
+            i2c1_port,
+            i2c2_port,
+            spi2_port,
+            spi_cs_gyro,
+            _dcmi_ctrl_pins,
+            _dmci_data_pins,
+        ) = setup_peripherals();
+
+        // TODO since any number of devices could sit on the external i2c1,
+        // we treat it as a shared bus
+        //let i2c1_bus = shared_bus::CortexMBusManager::new(i2c1_port);
+
+        let old_gyro_csn = OldOutputPin::new(spi_cs_gyro);
+        let mut gyro_opt: Option<_> = None;
+        if let Ok(mut gyro) = L3gd20::new(spi2_port, old_gyro_csn) {
+            if let Ok(device_id) = gyro.who_am_i() {
+                if device_id == 0xD4 {
+                    gyro_opt = Some(gyro)
+                }
+            }
+        }
+
+        Self {
+            external_i2c1: i2c1_port,
+            internal_i2c2: i2c2_port,
+            gyro: gyro_opt,
+        }
+    }
+}
