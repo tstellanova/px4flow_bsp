@@ -7,6 +7,8 @@ use stm32f4xx_hal as p_hal;
 
 use p_hal::stm32 as pac;
 
+use pac::{DCMI, RCC};
+
 use embedded_hal::blocking::delay::DelayMs;
 use embedded_hal::digital::v2::{OutputPin, ToggleableOutputPin};
 use p_hal::gpio::{GpioExt, Speed};
@@ -18,6 +20,7 @@ use l3gd20::L3gd20;
 
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
+use core::borrow::BorrowMut;
 
 /// Initialize peripherals for Pixracer.
 /// Pixracer chip is [STM32F407VGT6](https://www.mouser.com/datasheet/2/389/dm00037051-1797298.pdf)
@@ -36,7 +39,7 @@ pub fn setup_peripherals() -> (
     DcmiCtrlPins,
     DcmiDataPins,
 ) {
-    let dp = pac::Peripherals::take().unwrap();
+    let mut dp = pac::Peripherals::take().unwrap();
     let cp = cortex_m::Peripherals::take().unwrap();
 
     // Set up the system clock
@@ -104,14 +107,13 @@ pub fn setup_peripherals() -> (
     let dcmi_ctrl_pins = {
         let pixck = gpioa.pa6 // DCMI_PIXCK
             .into_alternate_af13()
-            .internal_pull_up(true)
+            .internal_pull_up(true) //TODO necessary?
             .set_speed(Speed::High) //TODO s/b 100 MHz Pullup
             .into_pull_up_input();
 
-
         let hsync = gpioa.pa4 // DCMI_HSYNC
             .into_alternate_af13()
-            .internal_pull_up(true)
+            .internal_pull_up(true) //TODO necessary?
             .set_speed(Speed::High) //TODO s/b 100 MHz Pullup
             .into_pull_up_input();
 
@@ -141,6 +143,35 @@ pub fn setup_peripherals() -> (
         gpioc.pc12.into_alternate_af13(), // DCMI_D9
     );
 
+    //configure GPIOA2, GPIOA3 as EXPOSURE and STANDBY PP output lines 2MHz
+    let _exposure_line = gpioa.pa2.into_push_pull_output().set_speed(Speed::Medium);
+    let _standby_line = gpioa.pa3.into_push_pull_output().set_speed(Speed::Medium);
+
+    // configure DCMI for continuous capture
+    // NOTE(unsafe) This executes only during initialization
+    unsafe {
+        //basic DCMI configuration
+        &(*pac::DCMI::ptr()).cr.write(| w| w
+            .cm().clear_bit() // capture mode: continuous
+            .ess().clear_bit() // synchro mode: hardware
+            .pckpol().clear_bit()// PCK polarity: falling
+            .vspol().clear_bit()// VS polarity: low
+            .hspol().clear_bit() // HS polarity: low
+            .fcrc().bits(0x00) // capture rate: every frame
+            .edm().bits(0x00));// extended data mode: 8 bit
+
+        //enable clock for DCMI peripheral
+        &(*pac::RCC::ptr()).ahb2enr.modify(|_, w| w
+            .dcmien().enabled()
+            );
+
+        //TODO verify this is how we enable capturing
+        &(*pac::DCMI::ptr()).cr.write(| w| w
+            .capture().set_bit()
+            .enable().set_bit()
+        );
+    }
+
 
     (
         (user_led0, user_led1, user_led2),
@@ -153,6 +184,8 @@ pub fn setup_peripherals() -> (
         dcmi_data_pins,
     )
 }
+
+
 
 pub type I2c1Port = p_hal::i2c::I2c<
     pac::I2C1,
@@ -209,18 +242,6 @@ pub type DcmiDataPins = (
 
 pub type GyroType = l3gd20::L3gd20<Spi2Port, OldOutputPin<SpiGyroCsn>>;
 
-// l3gd20::L3gd20<stm32f4xx_hal::spi::Spi<
-//     stm32f4::stm32f407::SPI2,
-//     (stm32f4xx_hal::gpio::gpiob::PB13<stm32f4xx_hal::gpio::Alternate<stm32f4xx_hal::gpio::AF5>>,
-//     stm32f4xx_hal::gpio::gpiob::PB14<stm32f4xx_hal::gpio::Alternate<stm32f4xx_hal::gpio::AF5>>,
-//     stm32f4xx_hal::gpio::gpiob::PB15<stm32f4xx_hal::gpio::Alternate<stm32f4xx_hal::gpio::AF5>>)>,
-//
-//     embedded_hal::digital::v1_compat::OldOutputPin<stm32f4xx_hal::gpio::gpiob::PB12<stm32f4xx_hal::gpio::Output<stm32f4xx_hal::gpio::PushPull>>>>
-//
-
-
-// pub type ExternalI2c1Bus = shared_bus::proxy::BusManager<bare_metal::Mutex<core::cell::RefCell<I2c1Port>>, I2c1Port>;
-
 
 pub struct Board {
     external_i2c1: I2c1Port,
@@ -263,4 +284,6 @@ impl Board {
             gyro: gyro_opt,
         }
     }
+
+
 }
