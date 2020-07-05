@@ -160,18 +160,50 @@ pub fn setup_peripherals() -> (
     tim5.start(2.mhz());
     core::mem::forget(tim5);
 
-    // TODO this config is incorrect
-    // Supply clock to MT9V034:
+
+    // Supply a clock signal to MT9V034:
     // PX4FLOW schematic is marked TIM8_CH3_MASTERCLOCK, but this is a typo:
-    // actually we use TIM3 CH3  TIM8_CH3
+    // actually we use TIM3 CH3
     let _masterclock_line = gpioc.pc8
         .into_alternate_af2() // AF2 -> TIM3
         .internal_pull_up(true)
         .into_push_pull_output()
         .set_speed(Speed::VeryHigh); // 100 MHz
-    let mut tim3 = Timer::tim3(dp.TIM3, 56.mhz(), clocks);
-    tim3.start(56.mhz());
-    core::mem::forget(tim3);
+    
+
+    // Init TIM3 Channel3
+    // NOTE(unsafe) This executes only during initialization
+    unsafe {
+        dp.TIM3.cr1.modify(|_r, w| { w
+            .ckd().div1() // clock division
+            .dir().up() // count up
+        });
+
+        dp.TIM3.psc.write(|w| w.bits(0)); //prescaler
+        dp.TIM3.arr.modify(|_r, w| { w
+            .arr().bits(3) //Auto-reload value (period)
+        });
+
+        dp.TIM3.ccer.modify(|_r, w| { w
+            .cc3p().clear_bit() //polarity high
+            .cc3e().set_bit() // outputstate enable
+        });
+
+        dp.TIM3.ccmr2_output_mut().modify(|_r, w|{ w
+            .oc3pe().enabled() //output compare preload enable
+            .oc3m().pwm_mode1() // output compare mode pwm1
+        });
+
+        dp.TIM3.ccr3.write(|w| {w
+            .bits(2) // pulse -- divide period by 2
+        });
+
+        dp.TIM3.cr1.modify(|_r, w| { w
+            .arpe().enabled() // Auto-reload preload enable
+            .cen().enabled() // TIM3 counter enable
+        });
+    }
+
 
     // configure DCMI for continuous capture
     // NOTE(unsafe) This executes only during initialization
@@ -332,8 +364,12 @@ impl Board {
             _dmci_data_pins,
         ) = setup_peripherals();
 
-        // TODO since any number of devices could sit on the external i2c1,
-        // we treat it as a shared bus
+        //TODO verify we are safe to forget the DCMI pins after configuration
+        core::mem::forget(_dcmi_ctrl_pins);
+        core::mem::forget(_dmci_data_pins);
+
+        // TODO since any number of devices could sit on the external i2c1 port,
+        //  we should treat it as a shared bus
         //let i2c1_bus = shared_bus::CortexMBusManager::new(i2c1_port);
 
         let old_gyro_csn = OldOutputPin::new(spi_cs_gyro);
