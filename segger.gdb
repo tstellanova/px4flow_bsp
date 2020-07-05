@@ -27,6 +27,6 @@ monitor semihosting enable
 load
 
 #break rust_begin_unwind
-run
+#run
 
-#stepi
+stepi

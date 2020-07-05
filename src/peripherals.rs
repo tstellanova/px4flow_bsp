@@ -19,6 +19,7 @@ use p_hal::time::{U32Ext};
 // use shared_bus::CortexMBusManager;
 use embedded_hal::digital::{v1_compat::OldOutputPin};
 use l3gd20::L3gd20;
+use mt9v034_i2c::{Mt9v034};
 
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
@@ -310,10 +311,11 @@ pub type LedOutputPin = p_hal::gpio::gpioe::PE<Output<PushPull>>;
 
 pub struct Board {
     pub external_i2c1: I2c1Port,
-    pub internal_i2c2: I2c2Port,
+    pub cam_config: Mt9v034<I2c2Port>,
     pub gyro_opt: Option<GyroType>,
     pub user_leds: [LedOutputPin; 3],
 }
+
 
 impl Board {
 
@@ -344,10 +346,12 @@ impl Board {
             }
         }
 
+        let mut cam_config = Mt9v034::new(i2c2_port, mt9v034_i2c::DEFAULT_I2C_ADDRESS);
+        cam_config.setup().unwrap();
 
         Self {
             external_i2c1: i2c1_port,
-            internal_i2c2: i2c2_port,
+            cam_config,
             gyro_opt: gyro_opt,
             user_leds: [
                 raw_user_leds.0,
