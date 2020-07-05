@@ -144,7 +144,7 @@ pub fn setup_peripherals() -> (
         gpioc.pc12.into_alternate_af13(), // DCMI_D9
     );
 
-    //configure GPIOA2, GPIOA3 as EXPOSURE and STANDBY PP output lines 2MHz
+    //configure PA2, PA3 as EXPOSURE and STANDBY PP output lines 2MHz
     let _exposure_line = gpioa.pa2 // TIM5_CH3_EXPOSURE
         .into_alternate_af2() // AF2 -> TIM5_CH3
         .into_push_pull_output()
@@ -154,6 +154,7 @@ pub fn setup_peripherals() -> (
         .into_push_pull_output()
         .set_speed(Speed::Low);
 
+    //TODO check TIM5 clock rate
     let mut tim5 = Timer::tim5(dp.TIM5, 2.mhz(), clocks);
     tim5.start(2.mhz());
     core::mem::forget(tim5);
@@ -163,17 +164,13 @@ pub fn setup_peripherals() -> (
     // PX4FLOW schematic is marked TIM8_CH3_MASTERCLOCK, but this is a typo:
     // actually we use TIM3 CH3  TIM8_CH3
     let _masterclock_line = gpioc.pc8
-        .into_alternate_af2() // select TIM3 with AF2
+        .into_alternate_af2() // AF2 -> TIM3
         .internal_pull_up(true)
         .into_push_pull_output()
-        .set_speed(Speed::VeryHigh); //s/b 100 MHz
+        .set_speed(Speed::VeryHigh); // 100 MHz
     let mut tim3 = Timer::tim3(dp.TIM3, 56.mhz(), clocks);
     tim3.start(56.mhz());
     core::mem::forget(tim3);
-
-
-//	/* Connect TIM3 pins to AF2 */;
-// 	GPIO_PinAFConfig(GPIOC, GPIO_PinSource8, GPIO_AF_TIM3);
 
     // configure DCMI for continuous capture
     // NOTE(unsafe) This executes only during initialization
@@ -200,6 +197,45 @@ pub fn setup_peripherals() -> (
         );
     }
 
+    unsafe {
+        let mut chan1 = &(*pac::DMA2::ptr()).st[1];
+        //configure DMA2, stream 1, channel 1 for DCMI
+        chan1.cr.write(|w| { w
+            .chsel().bits(1) // ch1
+            .dir().peripheral_to_memory() // transferring peripheral to memory
+            .pinc().fixed() // do not increment peripheral
+            .minc().incremented() // increment memory
+            // TODO psize
+            // TODO msize
+            .circ().enabled()// enable circular mode
+            .pl().high() // high priority
+            .mburst().single()// single memory burst
+            .pburst().single() // single peripheral burst
+        });
+        chan1.fcr.write(|w| { w
+            .dmdis().disabled() // disable fifo mode
+            .fth().full() // fifo threshold full
+        });
+
+        // TODO set NDT (number of items to transfer -- number of 32 bit words)
+        // chan1.ndtr.write(|w| { w
+        //
+        // });
+
+        // TODO set base addresses
+        // chan1.m0ar = mem0 base address
+        // chan1.m1ar = mem1 base address
+
+        //TODO wire dcmi_ctrl_pins and dcmi_data_pins to DMA:
+        // DMA2: Stream1, Channel_1 -> DCMI
+        // DoubleBufferMode
+
+        //enable DMA2 clock
+        &(*pac::RCC::ptr()).ahb1enr.modify(|_, w| w
+            .dma2en().enabled()
+        );
+
+    }
 
     (
         (user_led0, user_led1, user_led2),
