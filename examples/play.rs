@@ -18,8 +18,7 @@ use embedded_hal::digital::v2::ToggleableOutputPin;
 const GYRO_REPORTING_RATE_HZ: u16 = 380;
 const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 
-use px4flow_bsp::peripherals::{ Board};
-
+use px4flow_bsp::peripherals::Board;
 
 #[entry]
 fn main() -> ! {
@@ -41,8 +40,14 @@ fn main() -> ! {
                 for _ in 0..10 {
                     if board.gyro_opt.is_some() {
                         if let Ok(sample) =
-                            board.gyro_opt.as_mut().unwrap().gyro() {
-                            rprintln!("gyro {}, {}, {}", sample.x, sample.y, sample.z);
+                            board.gyro_opt.as_mut().unwrap().gyro()
+                        {
+                            rprintln!(
+                                "gyro {}, {}, {}",
+                                sample.x,
+                                sample.y,
+                                sample.z
+                            );
                         }
                     }
 
@@ -54,5 +59,3 @@ fn main() -> ! {
         let _ = board.user_leds[2].toggle(); //red
     }
 }
-
-
