@@ -106,7 +106,7 @@ impl Board<'static> {
         };
         let mut cam_config =
             Mt9v034::new(proxy2, mt9v034_i2c::DEFAULT_I2C_ADDRESS);
-        cam_config.setup().unwrap();
+        //TODO cam_config.setup().unwrap();
         let cam_opt = Some(cam_config);
 
         Self {
