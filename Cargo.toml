@@ -13,13 +13,18 @@ bare-metal = "1.0.0"
 embedded-hal = { version = "0.2.3", features = ["unproven"] }
 shared-bus = {version="0.1.4", features=["cortexm"] }
 panic-rtt-core = {version="0.1.1", optional=true}
+lazy_static = {version="1.4.0", features= ["spin_no_std"] }
 
 #stm32f4 = {version = "0.11", features = ["stm32f427"]  }
 #stm32f4xx-hal = { git = "https://github.com/stm32-rs/stm32f4xx-hal", features = ["stm32f427", "rt"] }
 stm32f4xx-hal = {version="0.8.3",  features = ["stm32f407", "rt"] }
 # Gyro
 l3gd20 = "0.2.0"
-mt9v034-i2c = {path="../mt9v034-i2c"}
+# Camera / imaging sensor
+mt9v034-i2c = {path="../mt9v034-i2c", features=["rttdebug"]}
+# Serial EEPROM
+eeprom24x = "0.3.0"
+
 
 [dev-dependencies]
 cortex-m-rt = "0.6.12"

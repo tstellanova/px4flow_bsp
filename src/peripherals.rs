@@ -16,16 +16,25 @@ use p_hal::timer::{self, Timer};
 use p_hal::gpio::{GpioExt, Output, PushPull, Speed};
 use p_hal::rcc::RccExt;
 use p_hal::time::U32Ext;
-// use shared_bus::CortexMBusManager;
 use embedded_hal::digital::v1_compat::OldOutputPin;
 use l3gd20::L3gd20;
 use mt9v034_i2c::Mt9v034;
+use eeprom24x::{Eeprom24x, SlaveAddr};
 
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
 
 use core::borrow::BorrowMut;
 use stm32f4xx_hal::timer::{PinC3, PinC4};
+use shared_bus::{BusProxy, CortexMBusManager, BusManager};
+
+use core::sync::atomic::{AtomicPtr, Ordering};
+use lazy_static::lazy_static;
+
+lazy_static! {
+    /// this is how we share peripherals between multiple threads
+    static ref I2C2_BUS_PTR: AtomicPtr<I2c2BusManagerType> = AtomicPtr::default();
+}
 
 /// Initialize peripherals for PX4FLOW.
 /// PX4FLOW v2.3 chip is [STM32F407VGT6](https://www.mouser.com/datasheet/2/389/dm00037051-1797298.pdf)
@@ -34,7 +43,8 @@ pub fn setup_peripherals() -> (
     (LedOutputPin, LedOutputPin, LedOutputPin),
     impl DelayMs<u8>,
     I2c1Port,
-    I2c2Port,
+    //I2c2Port,
+    I2c2BusManagerType,
     Spi2Port,
     SpiGyroCsn,
     DcmiCtrlPins,
@@ -70,19 +80,22 @@ pub fn setup_peripherals() -> (
     let user_led1 = gpioe.pe3.into_push_pull_output().downgrade(); //blue
     let user_led2 = gpioe.pe7.into_push_pull_output().downgrade(); //red
 
-    //used for eg external (offboard) communication
+    //i2c1 port used for eg external (offboard) communication
     let i2c1_port = {
         let scl = gpiob.pb8.into_alternate_af4().set_open_drain();
         let sda = gpiob.pb9.into_alternate_af4().set_open_drain();
         p_hal::i2c::I2c::i2c1(dp.I2C1, (scl, sda), 400.khz(), clocks)
     };
 
-    //used for eg MT9V034 configuration
+    // board-internal i2c2 port used for MT9V034 configuration
+    // and serial EEPROM
     let i2c2_port = {
-        let scl = gpiob.pb10.into_alternate_af4().set_open_drain();
-        let sda = gpiob.pb11.into_alternate_af4().set_open_drain();
-        p_hal::i2c::I2c::i2c2(dp.I2C2, (scl, sda), 1000.khz(), clocks)
+        let scl = gpiob.pb10.into_alternate_af4().set_speed(Speed::Low).set_open_drain();//J2C2_SCL
+        let sda = gpiob.pb11.into_alternate_af4().set_speed(Speed::Low).set_open_drain();//J2C2_SDA
+        p_hal::i2c::I2c::i2c2(dp.I2C2, (scl, sda), 100.khz(), clocks)
     };
+
+    let mut i2c2_bus: I2c2BusManagerType  = shared_bus::CortexMBusManager::new(i2c2_port);
 
     // used for gyro
     let spi2_port = {
@@ -163,13 +176,14 @@ pub fn setup_peripherals() -> (
 
     // Supply a clock signal to MT9V034:
     // PX4FLOW schematic is marked TIM8_CH3_MASTERCLOCK, but this is a typo:
-    // actually we use TIM3 CH3
-    let _masterclock_line = gpioc
+    // actually uses TIM3 CH3
+    let masterclock_line = gpioc
         .pc8
         .into_alternate_af2() // AF2 -> TIM3
         .internal_pull_up(true)
         .into_push_pull_output()
         .set_speed(Speed::VeryHigh); // 100 MHz
+    core::mem::forget(masterclock_line);
 
     // Init TIM3 Channel3
     // NOTE(unsafe) This executes only during initialization
@@ -303,13 +317,16 @@ pub fn setup_peripherals() -> (
         (user_led0, user_led1, user_led2),
         delay_source,
         i2c1_port,
-        i2c2_port,
+        // i2c2_port,
+        i2c2_bus,
         spi2_port,
         spi_cs_gyro,
         dcmi_ctrl_pins,
         dcmi_data_pins,
     )
 }
+
+
 
 pub type I2c1Port = p_hal::i2c::I2c<
     pac::I2C1,
@@ -326,6 +343,7 @@ pub type I2c2Port = p_hal::i2c::I2c<
         p_hal::gpio::gpiob::PB11<p_hal::gpio::AlternateOD<p_hal::gpio::AF4>>,
     ),
 >;
+use core::pin::Pin;
 
 pub type Spi2Port = p_hal::spi::Spi<
     pac::SPI2,
@@ -365,23 +383,49 @@ pub type DcmiDataPins = (
 );
 
 pub type GyroType = l3gd20::L3gd20<Spi2Port, OldOutputPin<SpiGyroCsn>>;
-
 pub type LedOutputPin = p_hal::gpio::gpioe::PE<Output<PushPull>>;
 
-pub struct Board {
+
+//type MutexInner = core::cell::RefCell<I2c>;
+// type Mutex = cortex_m::interrupt::Mutex<MutexInner>;
+// type BusManager = shared_bus::CortexMBusManager<MutexInner, I2c>;
+// type BusProxy = shared_bus::proxy::BusProxy<'static, Mutex, I2c>;
+
+pub type I2c2BusManagerType =
+    shared_bus::proxy::BusManager<
+        cortex_m::interrupt::Mutex<core::cell::RefCell<I2c2Port>>,
+        I2c2Port>;
+
+pub type I2c2BusProxyType<'a> =
+    shared_bus::proxy::BusProxy<'a,
+        cortex_m::interrupt::Mutex<core::cell::RefCell<I2c2Port>>, I2c2Port>;
+
+pub type EepromType<'a> = eeprom24x::Eeprom24x<
+    I2c2BusProxyType<'a>,
+    eeprom24x::page_size::B64,
+    eeprom24x::addr_size::TwoBytes>;
+
+pub type CameraConfigType<'a> = Mt9v034<I2c2BusProxyType<'a>>;
+// pub type CameraConfigType = Mt9v034<I2c2Port>;
+
+
+pub struct Board<'a> {
     pub external_i2c1: I2c1Port,
-    pub cam_config: Mt9v034<I2c2Port>,
+    // pub internal_i2c2: I2c2BusManagerType,
+    pub cam_config: Option<CameraConfigType<'a>>,
     pub gyro_opt: Option<GyroType>,
     pub user_leds: [LedOutputPin; 3],
+    pub eeprom: Option<EepromType<'a>>,
 }
 
-impl Board {
+impl Board<'static> {
     pub fn new() -> Self {
         let (
             raw_user_leds,
-            _delay_source,
+            mut delay_source,
             i2c1_port,
-            i2c2_port,
+            mut i2c2_bus,
+            // i2c2_port,
             spi2_port,
             spi_cs_gyro,
             _dcmi_ctrl_pins,
@@ -401,20 +445,52 @@ impl Board {
         if let Ok(mut gyro) = L3gd20::new(spi2_port, old_gyro_csn) {
             if let Ok(device_id) = gyro.who_am_i() {
                 if device_id == 0xD4 {
+                    #[cfg(feature = "rttdebug")]
+                    rprintln!("gyro setup done");
                     gyro_opt = Some(gyro)
                 }
             }
         }
 
-        let mut cam_config =
-            Mt9v034::new(i2c2_port, mt9v034_i2c::DEFAULT_I2C_ADDRESS);
-        cam_config.setup().unwrap();
+        //store the one-and-only i2c2 bus to a static
+        I2C2_BUS_PTR.store(&mut i2c2_bus, Ordering::Relaxed);
 
-        Self {
+        #[cfg(feature = "rttdebug")]
+        rprintln!("eeprom setup start");
+        let eeprom_i2c_address = SlaveAddr::default();
+        const PARAM_ADDRESS: u32 = 0x1234;
+
+        let proxy1 = unsafe {
+            I2C2_BUS_PTR.load(Ordering::SeqCst).as_mut().unwrap().acquire()
+        };
+
+        let mut eeprom = Eeprom24x::new_24x128(proxy1, eeprom_i2c_address);
+        eeprom.write_byte(PARAM_ADDRESS, 0xAA).unwrap();
+        delay_source.delay_ms(5u8);
+
+        let read_data = eeprom.read_byte(PARAM_ADDRESS).unwrap();
+        #[cfg(feature = "rttdebug")]
+        rprintln!("eeprom data: 0x{:X}", read_data);
+        let eeprom_opt = Some(eeprom);
+
+        let proxy2 = unsafe {
+            I2C2_BUS_PTR.load(Ordering::SeqCst).as_mut().unwrap().acquire()
+        };
+        let mut cam_config =
+            Mt9v034::new(proxy2, mt9v034_i2c::DEFAULT_I2C_ADDRESS);
+        cam_config.setup().unwrap();
+        let cam_opt = Some(cam_config);
+
+       Self {
             external_i2c1: i2c1_port,
-            cam_config,
+            // internal_i2c2: i2c2_bus,
+            cam_config: cam_opt,
             gyro_opt: gyro_opt,
             user_leds: [raw_user_leds.0, raw_user_leds.1, raw_user_leds.2],
+            eeprom: eeprom_opt,
         }
+
     }
+
+
 }
