@@ -7,3 +7,6 @@ LICENSE: BSD3 (see LICENSE file)
 
 #[allow(unused)]
 pub mod peripherals;
+
+#[allow(unused)]
+pub mod board;

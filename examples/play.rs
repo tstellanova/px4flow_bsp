@@ -18,7 +18,7 @@ use embedded_hal::digital::v2::ToggleableOutputPin;
 const GYRO_REPORTING_RATE_HZ: u16 = 380;
 const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 
-use px4flow_bsp::peripherals::Board;
+use px4flow_bsp::board::Board;
 
 #[entry]
 fn main() -> ! {
