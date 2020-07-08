@@ -8,11 +8,13 @@ use stm32f4xx_hal as p_hal;
 
 use pac::{DCMI, RCC};
 
-use embedded_hal::blocking::delay::DelayMs;
+use embedded_hal::blocking::delay::{DelayMs, DelayUs};
 use embedded_hal::digital::v2::{OutputPin, ToggleableOutputPin};
 use embedded_hal::timer::CountDown;
+use embedded_hal::PwmPin;
 use p_hal::timer::{self, Timer};
 
+use p_hal::pwm;
 use p_hal::gpio::{GpioExt, Output, PushPull, Speed};
 use p_hal::rcc::RccExt;
 use p_hal::time::U32Ext;
@@ -51,7 +53,7 @@ pub fn setup_peripherals() -> (
         .pclk2(84.mhz()) // APB2 clock is HCLK/2
         .freeze();
 
-    let delay_source = p_hal::delay::Delay::new(cp.SYST, clocks);
+    let mut delay_source = p_hal::delay::Delay::new(cp.SYST, clocks);
 
     // let hclk = clocks.hclk();
     // let pll48clk = clocks.pll48clk().unwrap_or(0u32.hz());
@@ -78,16 +80,13 @@ pub fn setup_peripherals() -> (
     // board-internal i2c2 port used for MT9V034 configuration
     // and serial EEPROM
     let i2c2_port = {
-        let scl = gpiob
-            .pb10
-            .into_alternate_af4()
-            .set_speed(Speed::Low)
-            .set_open_drain(); //J2C2_SCL
-        let sda = gpiob
-            .pb11
-            .into_alternate_af4()
-            .set_speed(Speed::Low)
-            .set_open_drain(); //J2C2_SDA
+        //TODO necessary to set self-address?
+        dp.I2C2.oar1.write(|w| { w
+            .add().bits(0xFE)
+            .addmode().add7()
+        });
+        let scl = gpiob.pb10.into_alternate_af4().set_open_drain(); //J2C2_SCL
+        let sda = gpiob.pb11.into_alternate_af4().set_open_drain(); //J2C2_SDA
         p_hal::i2c::I2c::i2c2(dp.I2C2, (scl, sda), 100.khz(), clocks)
     };
 
@@ -166,6 +165,18 @@ pub fn setup_peripherals() -> (
         .into_push_pull_output()
         .set_speed(Speed::Low);
 
+    // let mut cam_nreset_line = gpioa
+    //     .pa5 // CAM_NRESET
+    //     .into_push_pull_output()
+    //     .set_speed(Speed::Low);
+    // let _  = cam_nreset_line.set_high();
+    // delay_source.delay_us(2u8);
+    // let _ = cam_nreset_line.set_low();
+    // delay_source.delay_us(2u8);
+    // let _ = cam_nreset_line.set_high();
+    // delay_source.delay_us(2u8);
+    // let _ = cam_nreset_line.set_low();
+
     //TODO check TIM5 clock rate
     let mut tim5 = Timer::tim5(dp.TIM5, 2.mhz(), clocks);
     tim5.start(2.mhz());
@@ -174,59 +185,76 @@ pub fn setup_peripherals() -> (
     // Supply a clock signal to MT9V034:
     // PX4FLOW schematic is marked TIM8_CH3_MASTERCLOCK, but this is a typo:
     // actually uses TIM3 CH3
-    let masterclock_line = gpioc
-        .pc8
-        .into_alternate_af2() // AF2 -> TIM3
-        .internal_pull_up(true)
-        .into_push_pull_output()
-        .set_speed(Speed::VeryHigh); // 100 MHz
-    core::mem::forget(masterclock_line);
+    // let masterclock_line = gpioc
+    //     .pc8
+    //     .into_alternate_af2() // AF2 -> TIM3
+    //     .internal_pull_up(true)
+    //     .into_push_pull_output()
+    //     .set_speed(Speed::VeryHigh); // 100 MHz
+
+    let channels = (
+        gpioc.pc8.into_alternate_af2(),
+        gpioc.pc9.into_alternate_af2(), //unused
+    );
+    let pwm = pwm::tim3(dp.TIM3, channels, clocks, 24u32.mhz());
+    let (mut ch1, _ch2) = pwm;
+    let max_duty = ch1.get_max_duty();
+    let duty_avg = (max_duty / 2) + 1;
+
+    #[cfg(feature = "rttdebug")]
+    rprintln!("duty cycle: {}", duty_avg);
+
+    ch1.set_duty(duty_avg);
+    ch1.enable();
+    core::mem::forget(ch1);//free running forevermore
 
     // Init TIM3 Channel3
     // NOTE(unsafe) This executes only during initialization
-    unsafe {
-        // TIM3 clock enable
-        &(*pac::RCC::ptr())
-            .apb1enr
-            .modify(|_, w| w.tim3en().enabled());
+    // unsafe {
+    //     // TIM3 clock enable
+    //     &(*pac::RCC::ptr())
+    //         .apb1enr
+    //         .modify(|_, w| w.tim3en().enabled());
+    //
+    //     dp.TIM3.cr1.modify(|_, w| {
+    //         w.ckd()
+    //             .div1() // clock division
+    //             .dir()
+    //             .up() // count up
+    //     });
+    //
+    //     dp.TIM3.psc.write(|w| w.bits(0)); //prescaler
+    //     dp.TIM3.arr.modify(|_, w| {
+    //         w.arr().bits(3) //Auto-reload value (period)
+    //     });
+    //
+    //     dp.TIM3.ccer.modify(|_, w| {
+    //         w.cc3p()
+    //             .clear_bit() //polarity high
+    //             .cc3e()
+    //             .set_bit() // outputstate enable
+    //     });
+    //
+    //     dp.TIM3.ccmr2_output_mut().modify(|_, w| {
+    //         w.oc3pe()
+    //             .enabled() //output compare preload enable
+    //             .oc3m()
+    //             .pwm_mode1() // output compare mode pwm1
+    //     });
+    //
+    //     dp.TIM3.ccr3.write(|w| {
+    //         w.bits(2) // pulse -- divide period by 2
+    //     });
+    //
+    //     dp.TIM3.cr1.modify(|_, w| {
+    //         w.arpe()
+    //             .enabled() // Auto-reload preload enable
+    //             .cen()
+    //             .enabled() // TIM3 counter enable
+    //     });
+    // }
+    // core::mem::forget(masterclock_line);
 
-        dp.TIM3.cr1.modify(|_, w| {
-            w.ckd()
-                .div1() // clock division
-                .dir()
-                .up() // count up
-        });
-
-        dp.TIM3.psc.write(|w| w.bits(0)); //prescaler
-        dp.TIM3.arr.modify(|_, w| {
-            w.arr().bits(3) //Auto-reload value (period)
-        });
-
-        dp.TIM3.ccer.modify(|_, w| {
-            w.cc3p()
-                .clear_bit() //polarity high
-                .cc3e()
-                .set_bit() // outputstate enable
-        });
-
-        dp.TIM3.ccmr2_output_mut().modify(|_, w| {
-            w.oc3pe()
-                .enabled() //output compare preload enable
-                .oc3m()
-                .pwm_mode1() // output compare mode pwm1
-        });
-
-        dp.TIM3.ccr3.write(|w| {
-            w.bits(2) // pulse -- divide period by 2
-        });
-
-        dp.TIM3.cr1.modify(|_, w| {
-            w.arpe()
-                .enabled() // Auto-reload preload enable
-                .cen()
-                .enabled() // TIM3 counter enable
-        });
-    }
 
     #[cfg(feature = "rttdebug")]
     rprintln!("TIM3 config done");

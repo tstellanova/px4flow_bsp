@@ -75,6 +75,21 @@ impl Board<'static> {
         //store the one-and-only i2c2 bus to a static
         I2C2_BUS_PTR.store(&mut i2c2_bus, Ordering::Relaxed);
 
+
+
+        let proxy2 = unsafe {
+            I2C2_BUS_PTR
+                .load(Ordering::SeqCst)
+                .as_mut()
+                .unwrap()
+                .acquire()
+        };
+        let mut cam_config =
+            Mt9v034::new(proxy2, mt9v034_i2c::DEFAULT_I2C_ADDRESS);
+        //cam_config.setup().unwrap();
+        let cam_opt = Some(cam_config);
+
+
         #[cfg(feature = "rttdebug")]
         rprintln!("eeprom setup start");
         let eeprom_i2c_address = SlaveAddr::default();
@@ -87,27 +102,14 @@ impl Board<'static> {
                 .unwrap()
                 .acquire()
         };
-
         let mut eeprom = Eeprom24x::new_24x128(proxy1, eeprom_i2c_address);
-        eeprom.write_byte(PARAM_ADDRESS, 0xAA).unwrap();
-        delay_source.delay_ms(5u8);
-
-        let read_data = eeprom.read_byte(PARAM_ADDRESS).unwrap();
+        // eeprom.write_byte(PARAM_ADDRESS, 0xAA).unwrap();
+        // delay_source.delay_ms(5u8);
+        //
+        // let read_data = eeprom.read_byte(PARAM_ADDRESS).unwrap();
         #[cfg(feature = "rttdebug")]
         rprintln!("eeprom data: 0x{:X}", read_data);
         let eeprom_opt = Some(eeprom);
-
-        let proxy2 = unsafe {
-            I2C2_BUS_PTR
-                .load(Ordering::SeqCst)
-                .as_mut()
-                .unwrap()
-                .acquire()
-        };
-        let mut cam_config =
-            Mt9v034::new(proxy2, mt9v034_i2c::DEFAULT_I2C_ADDRESS);
-        //TODO cam_config.setup().unwrap();
-        let cam_opt = Some(cam_config);
 
         Self {
             external_i2c1: i2c1_port,
