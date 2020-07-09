@@ -86,7 +86,7 @@ impl Board<'static> {
         };
         let mut cam_config =
             Mt9v034::new(proxy2, mt9v034_i2c::DEFAULT_I2C_ADDRESS);
-        //cam_config.setup().unwrap();
+        cam_config.setup().unwrap();
         let cam_opt = Some(cam_config);
 
 
@@ -103,10 +103,10 @@ impl Board<'static> {
                 .acquire()
         };
         let mut eeprom = Eeprom24x::new_24x128(proxy1, eeprom_i2c_address);
-        // eeprom.write_byte(PARAM_ADDRESS, 0xAA).unwrap();
-        // delay_source.delay_ms(5u8);
-        //
-        // let read_data = eeprom.read_byte(PARAM_ADDRESS).unwrap();
+        eeprom.write_byte(PARAM_ADDRESS, 0xAA).unwrap();
+        delay_source.delay_ms(5u8);
+
+        let read_data = eeprom.read_byte(PARAM_ADDRESS).unwrap();
         #[cfg(feature = "rttdebug")]
         rprintln!("eeprom data: 0x{:X}", read_data);
         let eeprom_opt = Some(eeprom);

@@ -42,12 +42,12 @@ fn main() -> ! {
                         if let Ok(sample) =
                             board.gyro_opt.as_mut().unwrap().gyro()
                         {
-                            rprintln!(
-                                "gyro {}, {}, {}",
-                                sample.x,
-                                sample.y,
-                                sample.z
-                            );
+                            // rprintln!(
+                            //     "gyro {}, {}, {}",
+                            //     sample.x,
+                            //     sample.y,
+                            //     sample.z
+                            // );
                         }
                     }
 

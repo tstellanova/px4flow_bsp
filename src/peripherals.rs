@@ -202,7 +202,7 @@ pub fn setup_peripherals() -> (
     let duty_avg = (max_duty / 2) + 1;
 
     #[cfg(feature = "rttdebug")]
-    rprintln!("duty cycle: {}", duty_avg);
+    rprintln!("duty cycle: {} max: {}", duty_avg, max_duty);
 
     ch1.set_duty(duty_avg);
     ch1.enable();
