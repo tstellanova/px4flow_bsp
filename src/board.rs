@@ -13,25 +13,16 @@ use cortex_m::singleton;
 use panic_rtt_core::rprintln;
 
 
-/// Concrete type for gyro driver
-pub type GyroType = l3gd20::L3gd20<Spi2Port, OldOutputPin<SpiGyroCsn>>;
-
-/// Concrete type for serial EEPROM driver
-pub type EepromType<'a> = eeprom24x::Eeprom24x<
-    I2c2BusProxy<'a>,
-    eeprom24x::page_size::B64,
-    eeprom24x::addr_size::TwoBytes,
->;
-
-/// Concrete type for camera configuration driver
-pub type CameraConfigType<'a> = Mt9v034<I2c2BusProxy<'a>>;
-
+/// The main Board support type:
+/// This contains both pre-initialized drivers for
+/// onboard devices as well as bus ports for external ports peripherals.
 pub struct Board<'a> {
+    pub user_leds: [LedOutputPin; 3],
     pub external_i2c1: I2c1BusManager,
     pub cam_config: Option<CameraConfigType<'a>>,
     pub gyro_opt: Option<GyroType>,
-    pub user_leds: [LedOutputPin; 3],
     pub eeprom: Option<EepromType<'a>>,
+    //TODO add external UARTs
 }
 
 impl Board<'_> {
@@ -66,7 +57,6 @@ impl Board<'_> {
                 }
             }
         }
-
 
         //store the one-and-only i2c2 bus to a static
         let i2c2_bus_mgr: &'static mut I2c2BusManager =
@@ -120,3 +110,16 @@ pub type I2c1BusProxy<'a> = BusProxy<'a, I2c1Port>;
 
 pub type I2c2BusManager = BusManager<I2c2Port>;
 pub type I2c2BusProxy<'a> = BusProxy<'a, I2c2Port>;
+
+/// Concrete type for gyro driver
+pub type GyroType = l3gd20::L3gd20<Spi2Port, OldOutputPin<SpiGyroCsn>>;
+
+/// Concrete type for serial EEPROM driver
+pub type EepromType<'a> = eeprom24x::Eeprom24x<
+    I2c2BusProxy<'a>,
+    eeprom24x::page_size::B64,
+    eeprom24x::addr_size::TwoBytes,
+>;
+
+/// Concrete type for camera configuration driver
+pub type CameraConfigType<'a> = Mt9v034<I2c2BusProxy<'a>>;
