@@ -33,8 +33,7 @@ pub fn setup_peripherals() -> (
     (LedOutputPin, LedOutputPin, LedOutputPin),
     impl DelayMs<u8>,
     I2c1Port,
-    //I2c2Port,
-    I2c2BusManagerType,
+    I2c2Port,
     Spi2Port,
     SpiGyroCsn,
     DcmiCtrlPins,
@@ -90,8 +89,6 @@ pub fn setup_peripherals() -> (
         p_hal::i2c::I2c::i2c2(dp.I2C2, (scl, sda), 100.khz(), clocks)
     };
 
-    let mut i2c2_bus: I2c2BusManagerType =
-        shared_bus::CortexMBusManager::new(i2c2_port);
 
     // used for gyro
     let spi2_port = {
@@ -342,8 +339,7 @@ pub fn setup_peripherals() -> (
         (user_led0, user_led1, user_led2),
         delay_source,
         i2c1_port,
-        // i2c2_port,
-        i2c2_bus,
+        i2c2_port,
         spi2_port,
         spi_cs_gyro,
         dcmi_ctrl_pins,
@@ -408,13 +404,4 @@ pub type DcmiDataPins = (
 
 pub type LedOutputPin = p_hal::gpio::gpioe::PE<Output<PushPull>>;
 
-pub type I2c2BusManagerType = shared_bus::proxy::BusManager<
-    cortex_m::interrupt::Mutex<core::cell::RefCell<I2c2Port>>,
-    I2c2Port,
->;
 
-pub type I2c2BusProxyType<'a> = shared_bus::proxy::BusProxy<
-    'a,
-    cortex_m::interrupt::Mutex<core::cell::RefCell<I2c2Port>>,
-    I2c2Port,
->;
