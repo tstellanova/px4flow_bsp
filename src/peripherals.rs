@@ -22,7 +22,6 @@ use p_hal::time::U32Ext;
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
 
-use core::borrow::BorrowMut;
 use shared_bus::{BusManager, BusProxy, CortexMBusManager};
 use stm32f4xx_hal::timer::{PinC3, PinC4};
 
@@ -31,7 +30,7 @@ use stm32f4xx_hal::timer::{PinC3, PinC4};
 pub fn setup_peripherals() -> (
     //  user LEDs:
     (LedOutputPin, LedOutputPin, LedOutputPin),
-    impl DelayMs<u8>,
+    DelaySource,
     I2c1Port,
     I2c2Port,
     Spi2Port,
@@ -89,16 +88,15 @@ pub fn setup_peripherals() -> (
         p_hal::i2c::I2c::i2c2(dp.I2C2, (scl, sda), 100.khz(), clocks)
     };
 
-
     // used for gyro
     let spi2_port = {
         let sck = gpiob.pb13.into_alternate_af5();
-        let miso = gpiob.pb14.into_alternate_af5();
-        let mosi = gpiob.pb15.into_alternate_af5();
+        let cipo = gpiob.pb14.into_alternate_af5();
+        let copi = gpiob.pb15.into_alternate_af5();
 
         p_hal::spi::Spi::spi2(
             dp.SPI2,
-            (sck, miso, mosi),
+            (sck, cipo, copi),
             embedded_hal::spi::MODE_3,
             1_000_000.hz(),
             clocks,
@@ -179,15 +177,9 @@ pub fn setup_peripherals() -> (
     tim5.start(2.mhz());
     core::mem::forget(tim5);
 
-    // Supply a clock signal to MT9V034:
+    // Supply an XLCK clock signal to MT9V034:
     // PX4FLOW schematic is marked TIM8_CH3_MASTERCLOCK, but this is a typo:
-    // actually uses TIM3 CH3
-    // let masterclock_line = gpioc
-    //     .pc8
-    //     .into_alternate_af2() // AF2 -> TIM3
-    //     .internal_pull_up(true)
-    //     .into_push_pull_output()
-    //     .set_speed(Speed::VeryHigh); // 100 MHz
+    // it actually uses TIM3 CH3
 
     let channels = (
         gpioc.pc8.into_alternate_af2(),
@@ -205,135 +197,87 @@ pub fn setup_peripherals() -> (
     ch1.enable();
     core::mem::forget(ch1);//free running forevermore
 
-    // Init TIM3 Channel3
+    #[cfg(feature = "rttdebug")]
+    rprintln!("TIM3 XCLK config done");
+
+    // TODO configure DCMI peripheral for continuous capture
     // NOTE(unsafe) This executes only during initialization
     // unsafe {
-    //     // TIM3 clock enable
+    //     //basic DCMI configuration
+    //     &(*pac::DCMI::ptr()).cr.write(|w| {
+    //         w.cm()
+    //             .clear_bit() // capture mode: continuous
+    //             .ess()
+    //             .clear_bit() // synchro mode: hardware
+    //             .pckpol()
+    //             .clear_bit() // PCK polarity: falling
+    //             .vspol()
+    //             .clear_bit() // VS polarity: low
+    //             .hspol()
+    //             .clear_bit() // HS polarity: low
+    //             .fcrc()
+    //             .bits(0x00) // capture rate: every frame
+    //             .edm()
+    //             .bits(0x00)
+    //     }); // extended data mode: 8 bit
+    //
+    //     //enable clock for DCMI peripheral
     //     &(*pac::RCC::ptr())
-    //         .apb1enr
-    //         .modify(|_, w| w.tim3en().enabled());
+    //         .ahb2enr
+    //         .modify(|_, w| w.dcmien().enabled());
     //
-    //     dp.TIM3.cr1.modify(|_, w| {
-    //         w.ckd()
-    //             .div1() // clock division
-    //             .dir()
-    //             .up() // count up
-    //     });
-    //
-    //     dp.TIM3.psc.write(|w| w.bits(0)); //prescaler
-    //     dp.TIM3.arr.modify(|_, w| {
-    //         w.arr().bits(3) //Auto-reload value (period)
-    //     });
-    //
-    //     dp.TIM3.ccer.modify(|_, w| {
-    //         w.cc3p()
-    //             .clear_bit() //polarity high
-    //             .cc3e()
-    //             .set_bit() // outputstate enable
-    //     });
-    //
-    //     dp.TIM3.ccmr2_output_mut().modify(|_, w| {
-    //         w.oc3pe()
-    //             .enabled() //output compare preload enable
-    //             .oc3m()
-    //             .pwm_mode1() // output compare mode pwm1
-    //     });
-    //
-    //     dp.TIM3.ccr3.write(|w| {
-    //         w.bits(2) // pulse -- divide period by 2
-    //     });
-    //
-    //     dp.TIM3.cr1.modify(|_, w| {
-    //         w.arpe()
-    //             .enabled() // Auto-reload preload enable
-    //             .cen()
-    //             .enabled() // TIM3 counter enable
-    //     });
+    //     //TODO verify this is how we enable capturing
+    //     &(*pac::DCMI::ptr())
+    //         .cr
+    //         .write(|w| w.capture().set_bit().enable().set_bit());
     // }
-    // core::mem::forget(masterclock_line);
 
-
-    #[cfg(feature = "rttdebug")]
-    rprintln!("TIM3 config done");
-
-    // configure DCMI for continuous capture
-    // NOTE(unsafe) This executes only during initialization
-    unsafe {
-        //basic DCMI configuration
-        &(*pac::DCMI::ptr()).cr.write(|w| {
-            w.cm()
-                .clear_bit() // capture mode: continuous
-                .ess()
-                .clear_bit() // synchro mode: hardware
-                .pckpol()
-                .clear_bit() // PCK polarity: falling
-                .vspol()
-                .clear_bit() // VS polarity: low
-                .hspol()
-                .clear_bit() // HS polarity: low
-                .fcrc()
-                .bits(0x00) // capture rate: every frame
-                .edm()
-                .bits(0x00)
-        }); // extended data mode: 8 bit
-
-        //enable clock for DCMI peripheral
-        &(*pac::RCC::ptr())
-            .ahb2enr
-            .modify(|_, w| w.dcmien().enabled());
-
-        //TODO verify this is how we enable capturing
-        &(*pac::DCMI::ptr())
-            .cr
-            .write(|w| w.capture().set_bit().enable().set_bit());
-    }
-
-    unsafe {
-        let mut chan1 = &(*pac::DMA2::ptr()).st[1];
-        //configure DMA2, stream 1, channel 1 for DCMI
-        chan1.cr.write(|w| {
-            w.chsel()
-                .bits(1) // ch1
-                .dir()
-                .peripheral_to_memory() // transferring peripheral to memory
-                .pinc()
-                .fixed() // do not increment peripheral
-                .minc()
-                .incremented() // increment memory
-                // TODO psize
-                // TODO msize
-                .circ()
-                .enabled() // enable circular mode
-                .pl()
-                .high() // high priority
-                .mburst()
-                .single() // single memory burst
-                .pburst()
-                .single() // single peripheral burst
-        });
-        chan1.fcr.write(|w| {
-            w.dmdis()
-                .disabled() // disable fifo mode
-                .fth()
-                .full() // fifo threshold full
-        });
-
-        // TODO set NDT (number of items to transfer -- number of 32 bit words)
-        // chan1.ndtr.write(|w| { w
-        //
-        // });
-
-        // TODO set base addresses
-        // chan1.m0ar = mem0 base address
-        // chan1.m1ar = mem1 base address
-
-        //TODO wire dcmi_ctrl_pins and dcmi_data_pins to DMA:
-        // DMA2: Stream1, Channel_1 -> DCMI
-        // DoubleBufferMode
-
-        //TODO enable DMA2 clock
-        // &(*pac::RCC::ptr()).ahb1enr.write(|w| w.dma2en().enabled() );
-    }
+    // unsafe {
+    //     let mut chan1 = &(*pac::DMA2::ptr()).st[1];
+    //     //configure DMA2, stream 1, channel 1 for DCMI
+    //     chan1.cr.write(|w| {
+    //         w.chsel()
+    //             .bits(1) // ch1
+    //             .dir()
+    //             .peripheral_to_memory() // transferring peripheral to memory
+    //             .pinc()
+    //             .fixed() // do not increment peripheral
+    //             .minc()
+    //             .incremented() // increment memory
+    //             // TODO psize
+    //             // TODO msize
+    //             .circ()
+    //             .enabled() // enable circular mode
+    //             .pl()
+    //             .high() // high priority
+    //             .mburst()
+    //             .single() // single memory burst
+    //             .pburst()
+    //             .single() // single peripheral burst
+    //     });
+    //     chan1.fcr.write(|w| {
+    //         w.dmdis()
+    //             .disabled() // disable fifo mode
+    //             .fth()
+    //             .full() // fifo threshold full
+    //     });
+    //
+    //     // TODO set NDT (number of items to transfer -- number of 32 bit words)
+    //     // chan1.ndtr.write(|w| { w
+    //     //
+    //     // });
+    //
+    //     // TODO set base addresses
+    //     // chan1.m0ar = mem0 base address
+    //     // chan1.m1ar = mem1 base address
+    //
+    //     //TODO wire dcmi_ctrl_pins and dcmi_data_pins to DMA:
+    //     // DMA2: Stream1, Channel_1 -> DCMI
+    //     // DoubleBufferMode
+    //
+    //     //TODO enable DMA2 clock
+    //     // &(*pac::RCC::ptr()).ahb1enr.write(|w| w.dma2en().enabled() );
+    // }
 
     (
         (user_led0, user_led1, user_led2),
@@ -347,6 +291,7 @@ pub fn setup_peripherals() -> (
     )
 }
 
+/// I2C1 port used for external communication
 pub type I2c1Port = p_hal::i2c::I2c<
     pac::I2C1,
     (
@@ -355,6 +300,8 @@ pub type I2c1Port = p_hal::i2c::I2c<
     ),
 >;
 
+/// board-internal I2C2 port used for MT9V034 configuration
+/// and serial EEPROM
 pub type I2c2Port = p_hal::i2c::I2c<
     pac::I2C2,
     (
@@ -362,18 +309,18 @@ pub type I2c2Port = p_hal::i2c::I2c<
         p_hal::gpio::gpiob::PB11<p_hal::gpio::AlternateOD<p_hal::gpio::AF4>>,
     ),
 >;
-use core::pin::Pin;
 
+/// SPI2 port used for Gyro
 pub type Spi2Port = p_hal::spi::Spi<
     pac::SPI2,
     (
         p_hal::gpio::gpiob::PB13<p_hal::gpio::Alternate<p_hal::gpio::AF5>>, //SCLK
-        p_hal::gpio::gpiob::PB14<p_hal::gpio::Alternate<p_hal::gpio::AF5>>, //MISO
-        p_hal::gpio::gpiob::PB15<p_hal::gpio::Alternate<p_hal::gpio::AF5>>, //MOSI
+        p_hal::gpio::gpiob::PB14<p_hal::gpio::Alternate<p_hal::gpio::AF5>>, //CIPO
+        p_hal::gpio::gpiob::PB15<p_hal::gpio::Alternate<p_hal::gpio::AF5>>, //COPI
     ),
 >;
 
-/// chip select pin for Gyro
+/// Chip select pin for Gyro (used with SPI2)
 pub type SpiGyroCsn =
     p_hal::gpio::gpiob::PB12<p_hal::gpio::Output<p_hal::gpio::PushPull>>;
 
@@ -403,5 +350,6 @@ pub type DcmiDataPins = (
 );
 
 pub type LedOutputPin = p_hal::gpio::gpioe::PE<Output<PushPull>>;
+pub type DelaySource = p_hal::delay::Delay;
 
 
