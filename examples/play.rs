@@ -39,15 +39,15 @@ fn main() -> ! {
             for _ in 0..10 {
                 for _ in 0..10 {
                     if board.gyro_opt.is_some() {
-                        if let Ok(sample) =
+                        if let Ok(_sample) =
                             board.gyro_opt.as_mut().unwrap().gyro()
                         {
-                            rprintln!(
-                                "gyro {}, {}, {}",
-                                sample.x,
-                                sample.y,
-                                sample.z
-                            );
+                            // rprintln!(
+                            //     "gyro {}, {}, {}",
+                            //     sample.x,
+                            //     sample.y,
+                            //     sample.z
+                            // );
                         }
                     }
 
