@@ -25,6 +25,7 @@ bare-metal = "1.0.0"
 embedded-hal = { version = "0.2.3", features = ["unproven"] }
 shared-bus = {version="0.1.4", features=["cortexm"] }
 panic-rtt-core = {version="0.1.1", optional=true}
+cortex-m-semihosting = {version="0.3.5", optional=true}
 
 #stm32f4 = {version = "0.11", features = ["stm32f427"]  }
 #stm32f4xx-hal = { git = "https://github.com/stm32-rs/stm32f4xx-hal", features = ["stm32f427", "rt"] }
@@ -32,8 +33,8 @@ stm32f4xx-hal = {version="0.8.3",  features = ["stm32f407", "rt"] }
 # Gyro
 l3gd20 = "0.2.0"
 # Camera / imaging sensor
-#mt9v034-i2c = {path="../mt9v034-i2c", features=["rttdebug"]}
-mt9v034-i2c = { git="https://github.com/tstellanova/mt9v034-i2c", branch="trunk", features=["rttdebug"], version="0.1.0"}
+mt9v034-i2c = {path="../mt9v034-i2c", features=["rttdebug"]}
+#mt9v034-i2c = { git="https://github.com/tstellanova/mt9v034-i2c", branch="trunk", features=["rttdebug"], version="0.1.0"}
 #mt9v034-i2c = "0.1.0"
 # Serial EEPROM
 eeprom24x = "0.3.0"
@@ -45,5 +46,7 @@ panic-rtt-core = "0.1.1"
 
 [features]
 default = []
+# for stm32f4 discovery board + arducam mt9v034 breakout module
+breakout = ["cortex-m-semihosting"]
 rttdebug = ["panic-rtt-core"]
 

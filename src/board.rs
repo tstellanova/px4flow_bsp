@@ -1,7 +1,7 @@
 use crate::peripherals::*;
 use embedded_hal::blocking::delay::DelayMs;
 
-use eeprom24x::{Eeprom24x, SlaveAddr};
+use eeprom24x::{Eeprom24x};
 use embedded_hal::digital::v1_compat::OldOutputPin;
 use l3gd20::L3gd20;
 use mt9v034_i2c::Mt9v034;
@@ -11,6 +11,8 @@ use cortex_m::singleton;
 
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
+
+
 
 
 /// The main Board support type:
@@ -64,31 +66,39 @@ impl Board<'_> {
                 shared_bus::CortexMBusManager::new(i2c2_port)
             ).unwrap();
 
+
+
+        // #[cfg(feature = "rttdebug")]
+        // rprintln!("eeprom setup start");
+        // let eeprom_i2c_address = eeprom24x::SlaveAddr::default();
+        // const PARAM_ADDRESS: u32 = 0x1234;
+        //
+        // let mut eeprom = Eeprom24x::new_24x128(i2c2_bus_mgr.acquire(), eeprom_i2c_address);
+        // eeprom.write_byte(PARAM_ADDRESS, 0xAA).unwrap();
+        // delay_source.delay_ms(5u8);
+        //
+        // let read_data = eeprom.read_byte(PARAM_ADDRESS).unwrap();
+        // #[cfg(feature = "rttdebug")]
+        // rprintln!("eeprom data: 0x{:X}", read_data);
+        // let eeprom_opt = Some(eeprom);
+
+
+        #[cfg(feature = "breakout")]
+            let base_i2c_address = mt9v034_i2c::ARDUCAM_BREAKOUT_ADDRESS;
+        #[cfg(not(feature = "breakout"))]
+            let base_i2c_address=    mt9v034_i2c::PX4FLOW_CAM_ADDRESS;
+
         let mut cam_config =
-            Mt9v034::new(i2c2_bus_mgr.acquire(), mt9v034_i2c::DEFAULT_I2C_ADDRESS);
+            Mt9v034::new(i2c2_bus_mgr.acquire(), 0x48);
         cam_config.setup().unwrap();
         let cam_opt = Some(cam_config);
-
-        #[cfg(feature = "rttdebug")]
-        rprintln!("eeprom setup start");
-        let eeprom_i2c_address = SlaveAddr::default();
-        const PARAM_ADDRESS: u32 = 0x1234;
-
-        let mut eeprom = Eeprom24x::new_24x128(i2c2_bus_mgr.acquire(), eeprom_i2c_address);
-        eeprom.write_byte(PARAM_ADDRESS, 0xAA).unwrap();
-        delay_source.delay_ms(5u8);
-
-        let read_data = eeprom.read_byte(PARAM_ADDRESS).unwrap();
-        #[cfg(feature = "rttdebug")]
-        rprintln!("eeprom data: 0x{:X}", read_data);
-        let eeprom_opt = Some(eeprom);
 
         Self {
             external_i2c1: i2c1_bus_mgr,
             cam_config: cam_opt,
             gyro_opt: gyro_opt,
             user_leds: [raw_user_leds.0, raw_user_leds.1, raw_user_leds.2],
-            eeprom: eeprom_opt,
+            eeprom: None, //eeprom_opt,
         }
     }
 }

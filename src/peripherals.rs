@@ -78,13 +78,15 @@ pub fn setup_peripherals() -> (
     // board-internal i2c2 port used for MT9V034 configuration
     // and serial EEPROM
     let i2c2_port = {
-        //TODO necessary to set self-address?
-        dp.I2C2.oar1.write(|w| { w
-            .add().bits(0xFE)
-            .addmode().add7()
-        });
-        let scl = gpiob.pb10.into_alternate_af4().set_open_drain(); //J2C2_SCL
-        let sda = gpiob.pb11.into_alternate_af4().set_open_drain(); //J2C2_SDA
+        //TODO on discovery board we need pullup
+        let scl = gpiob.pb10.into_alternate_af4()
+            .internal_pull_up(true)
+            .set_speed(Speed::Low)
+            .set_open_drain(); //J2C2_SCL
+        let sda = gpiob.pb11.into_alternate_af4()
+            .internal_pull_up(true)
+            .set_speed(Speed::Low)
+            .set_open_drain(); //J2C2_SDA
         p_hal::i2c::I2c::i2c2(dp.I2C2, (scl, sda), 100.khz(), clocks)
     };
 
@@ -149,16 +151,19 @@ pub fn setup_peripherals() -> (
     );
 
     //configure PA2, PA3 as EXPOSURE and STANDBY PP output lines 2MHz
-    let _exposure_line = gpioa
+    let mut exposure_line = gpioa
         .pa2 // TIM5_CH3_EXPOSURE
         .into_alternate_af2() // AF2 -> TIM5_CH3
         .into_push_pull_output()
         .set_speed(Speed::Low);
-    let _standby_line = gpioa
+    let mut standby_line = gpioa
         .pa3 // TIM5_CH4_STANDBY
         .into_alternate_af2() // AF2 -> TIM5_CH4
         .into_push_pull_output()
         .set_speed(Speed::Low);
+    //clear these lines
+    let _ = exposure_line.set_low();
+    let _ = standby_line.set_low();
 
     // let mut cam_nreset_line = gpioa
     //     .pa5 // CAM_NRESET
@@ -178,7 +183,7 @@ pub fn setup_peripherals() -> (
     core::mem::forget(tim5);
 
     // Supply an XLCK clock signal to MT9V034:
-    // PX4FLOW schematic is marked TIM8_CH3_MASTERCLOCK, but this is a typo:
+    // PX4FLOW schematic PC8 is marked TIM8_CH3_MASTERCLOCK, but this is a typo:
     // it actually uses TIM3 CH3
 
     let channels = (
