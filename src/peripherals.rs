@@ -164,6 +164,7 @@ pub fn setup_peripherals() -> (
     //clear these lines
     let _ = exposure_line.set_low();
     let _ = standby_line.set_low();
+    //The sensor goes into standby mode by setting STANDBY to HIGH.
 
     // let mut cam_nreset_line = gpioa
     //     .pa5 // CAM_NRESET

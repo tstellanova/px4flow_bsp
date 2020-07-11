@@ -21,8 +21,8 @@ use panic_rtt_core::rprintln;
 pub struct Board<'a> {
     pub user_leds: [LedOutputPin; 3],
     pub external_i2c1: I2c1BusManager,
-    pub cam_config: Option<CameraConfigType<'a>>,
-    pub gyro_opt: Option<GyroType>,
+    pub camera_config: Option<CameraConfigType<'a>>,
+    pub gyro: Option<GyroType>,
     pub eeprom: Option<EepromType<'a>>,
     //TODO add external UARTs
 }
@@ -66,22 +66,19 @@ impl Board<'_> {
                 shared_bus::CortexMBusManager::new(i2c2_port)
             ).unwrap();
 
+        #[cfg(feature = "rttdebug")]
+        rprintln!("eeprom setup start");
+        let eeprom_i2c_address = eeprom24x::SlaveAddr::default();
+        const PARAM_ADDRESS: u32 = 0x1234;
 
+        let mut eeprom = Eeprom24x::new_24x128(i2c2_bus_mgr.acquire(), eeprom_i2c_address);
+        eeprom.write_byte(PARAM_ADDRESS, 0xAA).unwrap();
+        delay_source.delay_ms(5u8);
 
-        // #[cfg(feature = "rttdebug")]
-        // rprintln!("eeprom setup start");
-        // let eeprom_i2c_address = eeprom24x::SlaveAddr::default();
-        // const PARAM_ADDRESS: u32 = 0x1234;
-        //
-        // let mut eeprom = Eeprom24x::new_24x128(i2c2_bus_mgr.acquire(), eeprom_i2c_address);
-        // eeprom.write_byte(PARAM_ADDRESS, 0xAA).unwrap();
-        // delay_source.delay_ms(5u8);
-        //
-        // let read_data = eeprom.read_byte(PARAM_ADDRESS).unwrap();
-        // #[cfg(feature = "rttdebug")]
-        // rprintln!("eeprom data: 0x{:X}", read_data);
-        // let eeprom_opt = Some(eeprom);
-
+        let read_data = eeprom.read_byte(PARAM_ADDRESS).unwrap();
+        #[cfg(feature = "rttdebug")]
+        rprintln!("eeprom data: 0x{:X}", read_data);
+        let eeprom_opt = Some(eeprom);
 
         #[cfg(feature = "breakout")]
             let base_i2c_address = mt9v034_i2c::ARDUCAM_BREAKOUT_ADDRESS;
@@ -95,10 +92,10 @@ impl Board<'_> {
 
         Self {
             external_i2c1: i2c1_bus_mgr,
-            cam_config: cam_opt,
-            gyro_opt: gyro_opt,
+            camera_config: cam_opt,
+            gyro: gyro_opt,
             user_leds: [raw_user_leds.0, raw_user_leds.1, raw_user_leds.2],
-            eeprom: None, //eeprom_opt,
+            eeprom: eeprom_opt,
         }
     }
 }
