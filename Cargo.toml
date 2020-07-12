@@ -1,6 +1,6 @@
 [package]
 name = "px4flow_bsp"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Todd Stellanova <tstellanova@users.noreply.github.com>"]
 edition = "2018"
 description = "A board support package for the PX4FLOW optical flow sensor board"
@@ -33,7 +33,7 @@ stm32f4xx-hal = {version="0.8.3",  features = ["stm32f407", "rt"] }
 # Gyro
 l3gd20 = "0.2.0"
 # Camera / imaging sensor
-mt9v034-i2c = {path="../mt9v034-i2c", features=["rttdebug"]}
+mt9v034-i2c = {path="../mt9v034-i2c", features=["rttdebug"], version="0.1.1"}
 #mt9v034-i2c = { git="https://github.com/tstellanova/mt9v034-i2c", branch="trunk", features=["rttdebug"], version="0.1.0"}
 #mt9v034-i2c = "0.1.0"
 # Serial EEPROM
