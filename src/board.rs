@@ -12,6 +12,7 @@ use cortex_m::singleton;
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
 use crate::dcmi::DcmiWrapper;
+use cortex_m::asm::bkpt;
 
 
 /// The main Board support type:
@@ -23,6 +24,7 @@ pub struct Board<'a> {
     pub camera_config: Option<CameraConfigType<'a>>,
     pub gyro: Option<GyroType>,
     pub eeprom: Option<EepromType<'a>>,
+    // pub dcmi_wrap: Option<DcmiWrapper>,
     //TODO add external UARTs
 }
 
@@ -35,13 +37,13 @@ impl Board<'_> {
             i2c2_port,
             spi2_port,
             spi_cs_gyro,
-            _dcmi_ctrl_pins,
-            _dmci_data_pins,
+            dcmi_ctrl_pins,
+            dmci_data_pins,
         ) = setup_peripherals();
 
         //TODO verify we are safe to forget the DCMI pins after configuration
-        core::mem::forget(_dcmi_ctrl_pins);
-        core::mem::forget(_dmci_data_pins);
+        core::mem::forget(dcmi_ctrl_pins);
+        core::mem::forget(dmci_data_pins);
 
 
         // Since any number of devices could sit on the external i2c1 port,
@@ -80,17 +82,18 @@ impl Board<'_> {
         rprintln!("eeprom data: 0x{:X}", read_data);
         let eeprom_opt = Some(eeprom);
 
+        //
+        let mut wrappo = DcmiWrapper::new();
+        wrappo.setup();
+
         #[cfg(feature = "breakout")]
             let base_i2c_address = mt9v034_i2c::ARDUCAM_BREAKOUT_ADDRESS;
         #[cfg(not(feature = "breakout"))]
             let base_i2c_address=    mt9v034_i2c::PX4FLOW_CAM_ADDRESS;
-
         let mut cam_config =
             Mt9v034::new(i2c2_bus_mgr.acquire(), base_i2c_address);
         cam_config.setup().unwrap();
         let cam_opt = Some(cam_config);
-
-        //let _wrappo = DcmiWrapper::new();
 
         Self {
             external_i2c1: i2c1_bus_mgr,
@@ -98,6 +101,7 @@ impl Board<'_> {
             gyro: gyro_opt,
             user_leds: [raw_user_leds.0, raw_user_leds.1, raw_user_leds.2],
             eeprom: eeprom_opt,
+            //dcmi_wrap: Some(wrappo)
         }
     }
 }

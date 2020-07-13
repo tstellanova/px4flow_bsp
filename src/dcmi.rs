@@ -19,46 +19,62 @@ pub const FRAME_XFER_WORD_COUNT: u32 = (FULL_FRAME_PIXEL_COUNT / 4) as u32;
 pub type ImageFrameBuf = [u8; FULL_FRAME_PIXEL_COUNT];
 
 pub struct DcmiWrapper {
+    frame_width: usize,
+    frame_height: usize,
     image_buf1: ImageFrameBuf,
     image_buf2: ImageFrameBuf,
-    image_buf3: ImageFrameBuf,
+    // image_buf3: ImageFrameBuf,
 }
 
 
 impl DcmiWrapper {
 
     pub fn new() -> Self {
-        let mut inst =
-            Self {
-                image_buf1: [0; FULL_FRAME_PIXEL_COUNT],
-                image_buf2: [0; FULL_FRAME_PIXEL_COUNT],
-                image_buf3: [0; FULL_FRAME_PIXEL_COUNT],
-            };
+        Self {
+            frame_width: FULL_FRAME_ROW_WIDTH,
+            frame_height: FULL_FRAME_COL_HEIGHT,
+            image_buf1: [0; FULL_FRAME_PIXEL_COUNT],
+            image_buf2: [0; FULL_FRAME_PIXEL_COUNT],
+            // image_buf3: [0; FULL_FRAME_PIXEL_COUNT],
+        }
+    }
 
+    /// Dump count of captures and dma transfers to rtt
+    pub fn dump_counts() {
+        #[cfg(feature = "rttdebug")]
+        {
+            let cap_count = DCMI_CAP_COUNT.load(Ordering::Relaxed);
+            let xfer_count = DCMI_DMA_IT_COUNT.load(Ordering::Relaxed);
+            if cap_count > 0 {
+                rprintln!("caps: {} xfers: {}", cap_count, xfer_count);
+            }
+        }
+    }
+
+    /// Setup dcmi and associated DMA
+    pub fn setup(&mut self) {
+        //NOTE(unsafe) This executes only once during initialization
 
         #[cfg(feature = "rttdebug")]
-        rprintln!("dcmi setup start");
+        rprintln!("dcmi::setup start");
 
-        //NOTE(unsafe) This executes only once during initialization
         unsafe {
             Self::setup_dcmi();
-            inst.setup_dma2();
+            //self.setup_dma2();
         }
 
         // enable interrupts for DMA2 transfer and DCMI capture completion
-        // cortex_m::interrupt::free(|_| {
-        //     pac::NVIC::unpend(pac::Interrupt::DMA2_STREAM1);
-        //     pac::NVIC::unpend(pac::Interrupt::DCMI);
-        //     unsafe {
-        //         pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1);
-        //         pac::NVIC::unmask(pac::Interrupt::DCMI);
-        //     }
-        // });
+        cortex_m::interrupt::free(|_| {
+            //pac::NVIC::unpend(pac::Interrupt::DMA2_STREAM1);
+            pac::NVIC::unpend(pac::Interrupt::DCMI);
+            unsafe {
+                //pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1);
+                pac::NVIC::unmask(pac::Interrupt::DCMI);
+            }
+        });
 
         #[cfg(feature = "rttdebug")]
-        rprintln!("dcmi setup done");
-
-        inst
+        rprintln!("dcmi::setup done");
     }
 
     /// Configure DMA2 for DCMI peripheral -> memory transfer
@@ -74,8 +90,8 @@ impl DcmiWrapper {
                 .fixed()
                 .minc()// increment memory
                 .incremented()
-                // TODO psize
-                // TODO msize
+                .psize().bits32() // 32 bit (word) peripheral data size  DMA_PeripheralDataSize_Word
+                .msize().bits32()// 32 bit (word) memory data size  DMA_MemoryDataSize_Word
                 .circ()// enable circular mode
                 .enabled()
                 .pl()// high priority

@@ -12,7 +12,6 @@ use p_hal::stm32 as pac;
 use stm32f4xx_hal as p_hal;
 
 use pac::interrupt;
-use core::sync::atomic::{Ordering};
 
 use panic_rtt_core::{self, rprintln, rtt_init_print};
 
@@ -24,6 +23,7 @@ const GYRO_REPORTING_RATE_HZ: u16 = 380;
 const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 
 use px4flow_bsp::{board::Board, dcmi};
+use px4flow_bsp::dcmi::DcmiWrapper;
 
 #[interrupt]
 fn DMA2_STREAM1() {
@@ -75,15 +75,11 @@ fn main() -> ! {
 
             }
 
-            let cap_count = dcmi::DCMI_CAP_COUNT.load(Ordering::Relaxed);
-            let xfer_count = dcmi::DCMI_DMA_IT_COUNT.load(Ordering::Relaxed);
-            if cap_count > 0 {
-                rprintln!("caps: {} xfers: {}", cap_count, xfer_count);
-            }
+
             let _ = board.user_leds[1].toggle(); //blue
         }
 
-
+        DcmiWrapper::dump_counts();
         let _ = board.user_leds[2].toggle(); //red
     }
 }

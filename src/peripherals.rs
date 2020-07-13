@@ -136,16 +136,16 @@ pub fn setup_peripherals() -> (
     // DCMI digital camera interface pins (AF13)
     // this board supports ten parallel lines D0-D9
     let dcmi_data_pins = (
-        gpioc.pc6.into_alternate_af13(),  // DCMI_D0
-        gpioc.pc7.into_alternate_af13(),  // DCMI_D1
-        gpioe.pe0.into_alternate_af13(),  // DCMI_D2
-        gpioe.pe1.into_alternate_af13(),  // DCMI_D3
-        gpioe.pe4.into_alternate_af13(),  // DCMI_D4
-        gpiob.pb6.into_alternate_af13(),  // DCMI_D5
-        gpioe.pe5.into_alternate_af13(),  // DCMI_D6
-        gpioe.pe6.into_alternate_af13(),  // DCMI_D7
-        gpioc.pc10.into_alternate_af13(), // DCMI_D8
-        gpioc.pc12.into_alternate_af13(), // DCMI_D9
+        gpioc.pc6.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D0
+        gpioc.pc7.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D1
+        gpioe.pe0.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D2
+        gpioe.pe1.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D3
+        gpioe.pe4.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D4
+        gpiob.pb6.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D5
+        gpioe.pe5.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D6
+        gpioe.pe6.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D7
+        gpioc.pc10.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh), // DCMI_D8
+        gpioc.pc12.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh), // DCMI_D9
     );
 
     //configure PA2, PA3 as EXPOSURE and STANDBY PP output lines 2MHz
@@ -170,9 +170,9 @@ pub fn setup_peripherals() -> (
     tim5.start(2.mhz());
     core::mem::forget(tim5);
 
-    // Supply an XLCK clock signal to MT9V034 using PWM
-    // PX4FLOW schematic PC8 is marked TIM8_CH3_MASTERCLOCK, but this is a typo:
-    // it actually uses TIM3 CH3
+    // Supply an XCLK (external clock) signal to MT9V034 using PWM.
+    // PX4FLOW schematic PC8 is marked TIM8_CH3_MASTERCLOCK,
+    // but it actually uses TIM3 CH3
     let channels = (
         gpioc.pc8.into_alternate_af2(),
         gpioc.pc9.into_alternate_af2(), //unused
