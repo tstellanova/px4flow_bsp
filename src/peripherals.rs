@@ -161,32 +161,20 @@ pub fn setup_peripherals() -> (
         .into_alternate_af2() // AF2 -> TIM5_CH4
         .into_push_pull_output()
         .set_speed(Speed::Low);
-    //clear these lines
+    //clear these lines:
     let _ = exposure_line.set_low();
     let _ = standby_line.set_low();
     //The sensor goes into standby mode by setting STANDBY to HIGH.
+    //TODO no need to configure CAM_NRESET / PA5 ?
 
-    // let mut cam_nreset_line = gpioa
-    //     .pa5 // CAM_NRESET
-    //     .into_push_pull_output()
-    //     .set_speed(Speed::Low);
-    // let _  = cam_nreset_line.set_high();
-    // delay_source.delay_us(2u8);
-    // let _ = cam_nreset_line.set_low();
-    // delay_source.delay_us(2u8);
-    // let _ = cam_nreset_line.set_high();
-    // delay_source.delay_us(2u8);
-    // let _ = cam_nreset_line.set_low();
-
-    //TODO check TIM5 clock rate
+    //TODO check TIM5 clock rate/ configuration with above AF2 channels
     let mut tim5 = Timer::tim5(dp.TIM5, 2.mhz(), clocks);
     tim5.start(2.mhz());
     core::mem::forget(tim5);
 
-    // Supply an XLCK clock signal to MT9V034:
+    // Supply an XLCK clock signal to MT9V034 using PWM
     // PX4FLOW schematic PC8 is marked TIM8_CH3_MASTERCLOCK, but this is a typo:
     // it actually uses TIM3 CH3
-
     let channels = (
         gpioc.pc8.into_alternate_af2(),
         gpioc.pc9.into_alternate_af2(), //unused
@@ -206,85 +194,6 @@ pub fn setup_peripherals() -> (
     #[cfg(feature = "rttdebug")]
     rprintln!("TIM3 XCLK config done");
 
-    // TODO configure DCMI peripheral for continuous capture
-    // NOTE(unsafe) This executes only during initialization
-    // unsafe {
-    //     //basic DCMI configuration
-    //     &(*pac::DCMI::ptr()).cr.write(|w| {
-    //         w.cm()
-    //             .clear_bit() // capture mode: continuous
-    //             .ess()
-    //             .clear_bit() // synchro mode: hardware
-    //             .pckpol()
-    //             .clear_bit() // PCK polarity: falling
-    //             .vspol()
-    //             .clear_bit() // VS polarity: low
-    //             .hspol()
-    //             .clear_bit() // HS polarity: low
-    //             .fcrc()
-    //             .bits(0x00) // capture rate: every frame
-    //             .edm()
-    //             .bits(0x00)
-    //     }); // extended data mode: 8 bit
-    //
-    //     //enable clock for DCMI peripheral
-    //     &(*pac::RCC::ptr())
-    //         .ahb2enr
-    //         .modify(|_, w| w.dcmien().enabled());
-    //
-    //     //TODO verify this is how we enable capturing
-    //     &(*pac::DCMI::ptr())
-    //         .cr
-    //         .write(|w| w.capture().set_bit().enable().set_bit());
-    // }
-
-    // unsafe {
-    //     let mut chan1 = &(*pac::DMA2::ptr()).st[1];
-    //     //configure DMA2, stream 1, channel 1 for DCMI
-    //     chan1.cr.write(|w| {
-    //         w.chsel()
-    //             .bits(1) // ch1
-    //             .dir()
-    //             .peripheral_to_memory() // transferring peripheral to memory
-    //             .pinc()
-    //             .fixed() // do not increment peripheral
-    //             .minc()
-    //             .incremented() // increment memory
-    //             // TODO psize
-    //             // TODO msize
-    //             .circ()
-    //             .enabled() // enable circular mode
-    //             .pl()
-    //             .high() // high priority
-    //             .mburst()
-    //             .single() // single memory burst
-    //             .pburst()
-    //             .single() // single peripheral burst
-    //     });
-    //     chan1.fcr.write(|w| {
-    //         w.dmdis()
-    //             .disabled() // disable fifo mode
-    //             .fth()
-    //             .full() // fifo threshold full
-    //     });
-    //
-    //     // TODO set NDT (number of items to transfer -- number of 32 bit words)
-    //     // chan1.ndtr.write(|w| { w
-    //     //
-    //     // });
-    //
-    //     // TODO set base addresses
-    //     // chan1.m0ar = mem0 base address
-    //     // chan1.m1ar = mem1 base address
-    //
-    //     //TODO wire dcmi_ctrl_pins and dcmi_data_pins to DMA:
-    //     // DMA2: Stream1, Channel_1 -> DCMI
-    //     // DoubleBufferMode
-    //
-    //     //TODO enable DMA2 clock
-    //     // &(*pac::RCC::ptr()).ahb1enr.write(|w| w.dma2en().enabled() );
-    // }
-
     (
         (user_led0, user_led1, user_led2),
         delay_source,
@@ -296,6 +205,9 @@ pub fn setup_peripherals() -> (
         dcmi_data_pins,
     )
 }
+
+
+
 
 /// I2C1 port used for external communication
 pub type I2c1Port = p_hal::i2c::I2c<
