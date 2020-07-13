@@ -17,12 +17,18 @@ monitor speed auto
 #set remote memory-write-packet-size 1024
 #set remote memory-write-packet-size fixed
 
+# break DefaultHandler
+break HardFault
+#break px4flow_bsp::dcmi::setup_dcmi
+
+#break main
+
 # don't confirm when quitting debugger
 define hook-quit
     set confirm off
 end
 
-monitor semihosting enable
+#monitor semihosting enable
 
 load
 

@@ -11,8 +11,7 @@ use cortex_m::singleton;
 
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
-
-
+use crate::dcmi::DcmiWrapper;
 
 
 /// The main Board support type:
@@ -43,6 +42,7 @@ impl Board<'_> {
         //TODO verify we are safe to forget the DCMI pins after configuration
         core::mem::forget(_dcmi_ctrl_pins);
         core::mem::forget(_dmci_data_pins);
+
 
         // Since any number of devices could sit on the external i2c1 port,
         //  we should treat it as a shared bus
@@ -86,9 +86,11 @@ impl Board<'_> {
             let base_i2c_address=    mt9v034_i2c::PX4FLOW_CAM_ADDRESS;
 
         let mut cam_config =
-            Mt9v034::new(i2c2_bus_mgr.acquire(), 0x48);
+            Mt9v034::new(i2c2_bus_mgr.acquire(), base_i2c_address);
         cam_config.setup().unwrap();
         let cam_opt = Some(cam_config);
+
+        //let _wrappo = DcmiWrapper::new();
 
         Self {
             external_i2c1: i2c1_bus_mgr,

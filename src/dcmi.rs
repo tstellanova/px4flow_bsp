@@ -6,6 +6,9 @@ use pac::{DCMI, RCC};
 // use core::pin::Pin;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
+#[cfg(feature = "rttdebug")]
+use panic_rtt_core::rprintln;
+
 //TODO maybe these frame constants should be configurable?
 pub const MAX_FRAME_HEIGHT: usize = 480;
 pub const MAX_FRAME_WIDTH: usize = 752;
@@ -32,21 +35,28 @@ impl DcmiWrapper {
                 image_buf3: [0; FULL_FRAME_PIXEL_COUNT],
             };
 
+
+        #[cfg(feature = "rttdebug")]
+        rprintln!("dcmi setup start");
+
         //NOTE(unsafe) This executes only once during initialization
         unsafe {
-            setup_dcmi();
+            Self::setup_dcmi();
             inst.setup_dma2();
         }
 
         // enable interrupts for DMA2 transfer and DCMI capture completion
-        cortex_m::interrupt::free(|_| {
-            pac::NVIC::unpend(pac::Interrupt::DMA2_STREAM1);
-            pac::NVIC::unpend(pac::Interrupt::DCMI);
-            unsafe {
-                pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1);
-                pac::NVIC::unmask(pac::Interrupt::DCMI);
-            }
-        });
+        // cortex_m::interrupt::free(|_| {
+        //     pac::NVIC::unpend(pac::Interrupt::DMA2_STREAM1);
+        //     pac::NVIC::unpend(pac::Interrupt::DCMI);
+        //     unsafe {
+        //         pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1);
+        //         pac::NVIC::unmask(pac::Interrupt::DCMI);
+        //     }
+        // });
+
+        #[cfg(feature = "rttdebug")]
+        rprintln!("dcmi setup done");
 
         inst
     }
@@ -101,6 +111,40 @@ impl DcmiWrapper {
         &(*pac::RCC::ptr()).ahb1enr.write(|w| w.dma2en().enabled() );
 
     }
+
+    /// Configure the DCMI peripheral for continuous capture
+    unsafe fn setup_dcmi()
+    {
+        let mut dcmi_periph = &(*pac::DCMI::ptr());
+        //basic DCMI configuration
+        dcmi_periph.cr.modify(|_, w| { w
+            .cm()// capture mode: continuous
+            .clear_bit()
+            .ess()// synchro mode: hardware
+            .clear_bit()
+            .pckpol()// PCK polarity: falling
+            .clear_bit()
+            .vspol()// vsync polarity: low
+            .clear_bit()
+            .hspol()// hsync polarity: low
+            .clear_bit()
+            .fcrc()// capture rate: every frame
+            .bits(0x00)
+            .edm() // extended data mode: 8 bit
+            .bits(0x00)
+        });
+
+        //enable clock for DCMI peripheral
+        &(*pac::RCC::ptr()).ahb2enr
+            .modify(|_, w| w.dcmien().enabled());
+
+        // enable interrupt on frame capture completion
+        dcmi_periph.ier.modify(|_, w| w.frame_ie().set_bit());
+
+        //TODO verify this is how we enable capturing
+        dcmi_periph.cr.modify(|_, w| w.capture().set_bit().enable().set_bit());
+
+    }
 }
 
 pub static DCMI_DMA_IT_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -140,38 +184,6 @@ pub fn dcmi_irqhandler()
 }
 
 
-/// Configure the DCMI peripheral for continuous capture
-unsafe fn setup_dcmi()
-{
-    let mut dcmi_periph = &(*pac::DCMI::ptr());
-    //basic DCMI configuration
-    dcmi_periph.cr.modify(|_, w| { w
-        .cm()// capture mode: continuous
-        .clear_bit()
-        .ess()// synchro mode: hardware
-        .clear_bit()
-        .pckpol()// PCK polarity: falling
-        .clear_bit()
-        .vspol()// vsync polarity: low
-        .clear_bit()
-        .hspol()// hsync polarity: low
-        .clear_bit()
-        .fcrc()// capture rate: every frame
-        .bits(0x00)
-        .edm() // extended data mode: 8 bit
-        .bits(0x00)
-    });
 
-    //enable clock for DCMI peripheral
-    &(*pac::RCC::ptr()).ahb2enr
-        .modify(|_, w| w.dcmien().enabled());
-
-    // enable interrupt on frame capture completion
-    dcmi_periph.ier.modify(|_, w| w.frame_ie().set_bit());
-
-    //TODO verify this is how we enable capturing
-    dcmi_periph.cr.modify(|_, w| w.capture().set_bit().enable().set_bit());
-
-}
 
 

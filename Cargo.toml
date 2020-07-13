@@ -25,7 +25,6 @@ bare-metal = "1.0.0"
 embedded-hal = { version = "0.2.3", features = ["unproven"] }
 shared-bus = {version="0.1.4", features=["cortexm"] }
 panic-rtt-core = {version="0.1.1", optional=true}
-cortex-m-semihosting = {version="0.3.5", optional=true}
 
 #stm32f4 = {version = "0.11", features = ["stm32f427"]  }
 #stm32f4xx-hal = { git = "https://github.com/stm32-rs/stm32f4xx-hal", features = ["stm32f427", "rt"] }
@@ -47,6 +46,6 @@ panic-rtt-core = "0.1.1"
 [features]
 default = []
 # for stm32f4 discovery board + arducam mt9v034 breakout module
-breakout = ["cortex-m-semihosting"]
+breakout = []
 rttdebug = ["panic-rtt-core"]
 

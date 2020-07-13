@@ -78,13 +78,11 @@ pub fn setup_peripherals() -> (
     // board-internal i2c2 port used for MT9V034 configuration
     // and serial EEPROM
     let i2c2_port = {
-        //TODO on discovery board we need pullup
+        //TODO on discovery board we need internal pullups enabled: internal_pull_up(true)
         let scl = gpiob.pb10.into_alternate_af4()
-            .internal_pull_up(true)
             .set_speed(Speed::Low)
             .set_open_drain(); //J2C2_SCL
         let sda = gpiob.pb11.into_alternate_af4()
-            .internal_pull_up(true)
             .set_speed(Speed::Low)
             .set_open_drain(); //J2C2_SDA
         p_hal::i2c::I2c::i2c2(dp.I2C2, (scl, sda), 100.khz(), clocks)
