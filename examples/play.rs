@@ -79,6 +79,15 @@ fn main() -> ! {
             let _ = board.user_leds[1].toggle(); //blue
         }
 
+        if let Some(foo) = board.dcmi_wrap.as_mut() {
+            if foo.dcmi_capture_finished() {
+                rprintln!("cap finished!");
+            }
+            if foo.dma_transfer_finished() {
+                rprintln!("xfer finished!");
+            }
+        }
+
         DcmiWrapper::dump_counts();
         let _ = board.user_leds[2].toggle(); //red
     }

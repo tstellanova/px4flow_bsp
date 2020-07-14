@@ -37,12 +37,14 @@ pub fn setup_peripherals() -> (
     SpiGyroCsn,
     DcmiCtrlPins,
     DcmiDataPins,
+    pac::DMA2,
+    pac::DCMI
 ) {
     let mut dp = pac::Peripherals::take().unwrap();
     let cp = cortex_m::Peripherals::take().unwrap();
 
     // Set up the system clock
-    let rcc = dp.RCC.constrain();
+    let mut rcc = dp.RCC.constrain();
     let clocks = rcc
         .cfgr
         .use_hse(24.mhz()) // 24 MHz xtal
@@ -134,6 +136,7 @@ pub fn setup_peripherals() -> (
         (pixck, hsync, vsync)
     };
 
+
     // DCMI digital camera interface pins (AF13)
     // this board supports ten parallel lines D0-D9
     let dcmi_data_pins = (
@@ -149,15 +152,26 @@ pub fn setup_peripherals() -> (
         gpioc.pc12.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(), // DCMI_D9
     );
 
+    unsafe {
+        // enable peripheral clocks for DCMI and DMA2
+        &(*pac::RCC::ptr()).ahb2enr
+            .modify(|_, w| w.dcmien().enabled());
+        &(*pac::RCC::ptr()).ahb1enr
+            .modify(|_, w| w.dma2en().enabled());
+    }
+
+    let dcmi = dp.DCMI;
+    let dma2 = dp.DMA2;
+
     //configure PA2, PA3 as EXPOSURE and STANDBY PP output lines 2MHz
     let mut exposure_line = gpioa
         .pa2 // TIM5_CH3_EXPOSURE
-        .into_alternate_af2() // AF2 -> TIM5_CH3
+        //.into_alternate_af2() // AF2 -> TIM5_CH3
         .into_push_pull_output()
         .set_speed(Speed::Low);
     let mut standby_line = gpioa
         .pa3 // TIM5_CH4_STANDBY
-        .into_alternate_af2() // AF2 -> TIM5_CH4
+        //.into_alternate_af2() // AF2 -> TIM5_CH4
         .into_push_pull_output()
         .set_speed(Speed::Low);
     //clear these lines:
@@ -166,10 +180,10 @@ pub fn setup_peripherals() -> (
     //The sensor goes into standby mode by setting STANDBY to HIGH.
     //TODO no need to configure CAM_NRESET / PA5 ?
 
-    //TODO check TIM5 clock rate/ configuration with above AF2 channels
-    let mut tim5 = Timer::tim5(dp.TIM5, 2.mhz(), clocks);
-    tim5.start(2.mhz());
-    core::mem::forget(tim5);
+    // //TODO check TIM5 clock rate/ configuration with above AF2 channels
+    // let mut tim5 = Timer::tim5(dp.TIM5, 2.mhz(), clocks);
+    // tim5.start(2.mhz());
+    // core::mem::forget(tim5);
 
     // Supply an XCLK (external clock) signal to MT9V034 using PWM.
     // PX4FLOW schematic PC8 is marked TIM8_CH3_MASTERCLOCK,
@@ -202,6 +216,8 @@ pub fn setup_peripherals() -> (
         spi_cs_gyro,
         dcmi_ctrl_pins,
         dcmi_data_pins,
+        dma2,
+        dcmi
     )
 }
 

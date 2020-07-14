@@ -24,7 +24,7 @@ pub struct Board<'a> {
     pub camera_config: Option<CameraConfigType<'a>>,
     pub gyro: Option<GyroType>,
     pub eeprom: Option<EepromType<'a>>,
-    // pub dcmi_wrap: Option<DcmiWrapper>,
+    pub dcmi_wrap: Option<DcmiWrapper>,
     //TODO add external UARTs
 }
 
@@ -38,13 +38,14 @@ impl Board<'_> {
             spi2_port,
             spi_cs_gyro,
             dcmi_ctrl_pins,
-            dmci_data_pins,
+            dcmi_data_pins,
+            dma2,
+            dcmi
         ) = setup_peripherals();
 
         //TODO verify we are safe to forget the DCMI pins after configuration
         core::mem::forget(dcmi_ctrl_pins);
-        core::mem::forget(dmci_data_pins);
-
+        core::mem::forget(dcmi_data_pins);
 
         // Since any number of devices could sit on the external i2c1 port,
         //  we should treat it as a shared bus
@@ -83,8 +84,10 @@ impl Board<'_> {
         let eeprom_opt = Some(eeprom);
 
         //
-        let mut wrappo = DcmiWrapper::new();
-        wrappo.setup();
+        let mut dcmi_wrap = DcmiWrapper::new(dcmi, dma2);
+        dcmi_wrap.setup();
+
+
 
         #[cfg(feature = "breakout")]
             let base_i2c_address = mt9v034_i2c::ARDUCAM_BREAKOUT_ADDRESS;
@@ -92,16 +95,15 @@ impl Board<'_> {
             let base_i2c_address=    mt9v034_i2c::PX4FLOW_CAM_ADDRESS;
         let mut cam_config =
             Mt9v034::new(i2c2_bus_mgr.acquire(), base_i2c_address);
-        cam_config.setup().unwrap();
-        let cam_opt = Some(cam_config);
+        cam_config.setup().expect("could not configure MT9V034");
 
         Self {
             external_i2c1: i2c1_bus_mgr,
-            camera_config: cam_opt,
+            camera_config: Some(cam_config),
             gyro: gyro_opt,
             user_leds: [raw_user_leds.0, raw_user_leds.1, raw_user_leds.2],
             eeprom: eeprom_opt,
-            //dcmi_wrap: Some(wrappo)
+            dcmi_wrap: Some(dcmi_wrap)
         }
     }
 }

@@ -21,6 +21,8 @@ pub type ImageFrameBuf = [u8; FULL_FRAME_PIXEL_COUNT];
 pub struct DcmiWrapper {
     frame_width: usize,
     frame_height: usize,
+    dcmi: pac::DCMI,
+    dma2: pac::DMA2,
     // image_buf1: ImageFrameBuf,
     // image_buf2: ImageFrameBuf,
     // image_buf3: ImageFrameBuf,
@@ -34,13 +36,15 @@ static mut IMG_BUF3: ImageFrameBuf = [0; FULL_FRAME_PIXEL_COUNT];
 
 impl DcmiWrapper {
 
-    pub fn new() -> Self {
+    pub fn new(dcmi: pac::DCMI, dma2: pac::DMA2) -> Self {
         Self {
             frame_width: FULL_FRAME_ROW_WIDTH,
             frame_height: FULL_FRAME_COL_HEIGHT,
             // image_buf1: [0; FULL_FRAME_PIXEL_COUNT],
             // image_buf2: [0; FULL_FRAME_PIXEL_COUNT],
             // image_buf3: [0; FULL_FRAME_PIXEL_COUNT],
+            dcmi,
+            dma2
         }
     }
 
@@ -63,45 +67,35 @@ impl DcmiWrapper {
         #[cfg(feature = "rttdebug")]
         rprintln!("dcmi::setup start: {}, {}",FULL_FRAME_PIXEL_COUNT, FRAME_XFER_WORD_COUNT);
 
-
         unsafe {
-            // enable peripheral clocks for DCMI and DMA2
-            &(*pac::RCC::ptr()).ahb2enr
-                .modify(|_, w| w.dcmien().enabled());
-            &(*pac::RCC::ptr()).ahb1enr
-                .modify(|_, w| w.dma2en().enabled());
-
-            Self::setup_dcmi();
-            Self::setup_dma2();
-            Self::enable_dcmi_capture();
-            Self::enable_dma2();
+            self.setup_dcmi();
+            self.setup_dma2();
+            self.enable_dcmi_capture();
+            self.enable_dma2();
         }
 
-        cortex_m::interrupt::free(|_| {
-
-            // enable interrupts for DMA2 transfer and DCMI capture completion
-            pac::NVIC::unpend(pac::Interrupt::DMA2_STREAM1);
-            pac::NVIC::unpend(pac::Interrupt::DCMI);
-            unsafe {
-                //    NVIC_SetPriority(DMA2_Stream1_IRQn, IRQ_PRI_DMA21);
-                // pac::NVIC::set_priority(pac::Interrupt::DMA2_STREAM1, 21);
-                // pac::NVIC::set_priority(pac::Interrupt::DCMI, 5);
-
-
-                //    NVIC_SetPriority(DCMI_IRQn, IRQ_PRI_DCMI);
-                pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1);
-                pac::NVIC::unmask(pac::Interrupt::DCMI);
-            }
-        });
+        // cortex_m::interrupt::free(|_| {
+        //     // enable interrupts for DMA2 transfer and DCMI capture completion
+        //     pac::NVIC::unpend(pac::Interrupt::DMA2_STREAM1);
+        //     pac::NVIC::unpend(pac::Interrupt::DCMI);
+        //     unsafe {
+        //         //TODO set priority on dcmi and dma2?
+        //         // pac::NVIC::set_priority(pac::Interrupt::DMA2_STREAM1, 21);
+        //         // pac::NVIC::set_priority(pac::Interrupt::DCMI, 5);
+        //
+        //         pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1);
+        //         pac::NVIC::unmask(pac::Interrupt::DCMI);
+        //     }
+        // });
 
         #[cfg(feature = "rttdebug")]
         rprintln!("dcmi::setup done");
     }
 
     /// Configure DMA2 for DCMI peripheral -> memory transfer
-    unsafe fn setup_dma2() {
+    unsafe fn setup_dma2(&mut self) {
         //configure DMA2, stream 1, channel 1 for DCMI peripheral -> memory
-        let mut stream1_chan1 = &(*pac::DMA2::ptr()).st[1];
+        let mut stream1_chan1 = &self.dma2.st[1];
         //configure double-buffer mode
         stream1_chan1.cr.modify(|_, w| w
             // enable double-buffer mode
@@ -160,11 +154,10 @@ impl DcmiWrapper {
     }
 
     /// Configure the DCMI peripheral for continuous capture
-    unsafe fn setup_dcmi()
+    unsafe fn setup_dcmi(&mut self)
     {
-        let mut dcmi_periph = &(*pac::DCMI::ptr());
         //basic DCMI configuration
-        dcmi_periph.cr.modify(|_, w| { w
+        self.dcmi.cr.modify(|_, w| { w
             .cm()// capture mode: continuous
             .clear_bit()
             .ess()// synchro mode: hardware
@@ -180,22 +173,18 @@ impl DcmiWrapper {
             .edm() // extended data mode: 8 bit
             .bits(0x00)
         });
-
     }
 
-
-    unsafe fn enable_dcmi_capture() {
-        let mut dcmi_periph = &(*pac::DCMI::ptr());
-
-        dcmi_periph.cr.modify(|_, w|
+    unsafe fn enable_dcmi_capture(&mut self) {
+        self.dcmi.cr.modify(|_, w|
             w.capture().set_bit().enable().set_bit());
 
         // enable interrupt on frame capture completion
-        dcmi_periph.ier.modify(|_, w| w.frame_ie().set_bit());
+        self.dcmi.ier.modify(|_, w| w.frame_ie().set_bit());
     }
 
-    unsafe fn enable_dma2() {
-        let mut stream1_chan1 = &(*pac::DMA2::ptr()).st[1];
+    unsafe fn enable_dma2(&mut self) {
+        let mut stream1_chan1 = &self.dma2.st[1];
         stream1_chan1.cr.modify(|_, w| w
             // enable stream
             .en().enabled()
@@ -204,6 +193,14 @@ impl DcmiWrapper {
             // Half transfer interrupt enable
             .htie().enabled()
         );
+    }
+
+    pub fn dcmi_capture_finished(&mut self) -> bool {
+        self.dcmi.ris.read().frame_ris().bit_is_set()
+    }
+
+    pub fn dma_transfer_finished(&mut self) -> bool {
+        self.dma2.lisr.read().tcif1().bit_is_set()
     }
 }
 
