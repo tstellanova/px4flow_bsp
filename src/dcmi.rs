@@ -21,10 +21,15 @@ pub type ImageFrameBuf = [u8; FULL_FRAME_PIXEL_COUNT];
 pub struct DcmiWrapper {
     frame_width: usize,
     frame_height: usize,
-    image_buf1: ImageFrameBuf,
-    image_buf2: ImageFrameBuf,
+    // image_buf1: ImageFrameBuf,
+    // image_buf2: ImageFrameBuf,
     // image_buf3: ImageFrameBuf,
 }
+
+
+static mut IMG_BUF1: ImageFrameBuf = [0; FULL_FRAME_PIXEL_COUNT];
+static mut IMG_BUF2: ImageFrameBuf = [0; FULL_FRAME_PIXEL_COUNT];
+static mut IMG_BUF3: ImageFrameBuf = [0; FULL_FRAME_PIXEL_COUNT];
 
 
 impl DcmiWrapper {
@@ -33,8 +38,8 @@ impl DcmiWrapper {
         Self {
             frame_width: FULL_FRAME_ROW_WIDTH,
             frame_height: FULL_FRAME_COL_HEIGHT,
-            image_buf1: [0; FULL_FRAME_PIXEL_COUNT],
-            image_buf2: [0; FULL_FRAME_PIXEL_COUNT],
+            // image_buf1: [0; FULL_FRAME_PIXEL_COUNT],
+            // image_buf2: [0; FULL_FRAME_PIXEL_COUNT],
             // image_buf3: [0; FULL_FRAME_PIXEL_COUNT],
         }
     }
@@ -59,16 +64,25 @@ impl DcmiWrapper {
         rprintln!("dcmi::setup start");
 
         unsafe {
+            // enable peripheral clocks for DCMI and DMA2
+            &(*pac::RCC::ptr()).ahb2enr
+                .modify(|_, w| w.dcmien().enabled());
+            &(*pac::RCC::ptr()).ahb1enr
+                .modify(|_, w| w.dma2en().enabled());
+
             Self::setup_dcmi();
-            //self.setup_dma2();
+            Self::setup_dma2();
+            Self::enable_dcmi_capture();
+            Self::enable_dma2();
         }
 
-        // enable interrupts for DMA2 transfer and DCMI capture completion
         cortex_m::interrupt::free(|_| {
-            //pac::NVIC::unpend(pac::Interrupt::DMA2_STREAM1);
+
+            // enable interrupts for DMA2 transfer and DCMI capture completion
+            pac::NVIC::unpend(pac::Interrupt::DMA2_STREAM1);
             pac::NVIC::unpend(pac::Interrupt::DCMI);
             unsafe {
-                //pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1);
+                pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1);
                 pac::NVIC::unmask(pac::Interrupt::DCMI);
             }
         });
@@ -78,10 +92,25 @@ impl DcmiWrapper {
     }
 
     /// Configure DMA2 for DCMI peripheral -> memory transfer
-    unsafe fn setup_dma2(&mut self) {
+    unsafe fn setup_dma2() {
         //configure DMA2, stream 1, channel 1 for DCMI peripheral -> memory
         let mut stream1_chan1 = &(*pac::DMA2::ptr()).st[1];
-        stream1_chan1.cr.write(|w| {
+        //configure double-buffer mode
+        stream1_chan1.cr.modify(|_, w| w
+            // enable double-buffer mode
+            .dbm().enabled()
+            // select Memory0 initially
+            .ct().memory0());
+
+        // TODO this is probably unacceptable as the buffer address is not pinned?
+        let mem0_addr: u32 = (&IMG_BUF1 as *const ImageFrameBuf) as u32;
+        let mem1_addr: u32 = (&IMG_BUF2 as *const ImageFrameBuf) as u32;
+
+        stream1_chan1.m0ar.write(|w| w.bits(mem0_addr));
+        stream1_chan1.m1ar.write(|w| w.bits(mem1_addr));
+
+        // init dma2 stream1
+        stream1_chan1.cr.modify(|_, w| {
             w.chsel() // ch1
                 .bits(1)
                 .dir() // transferring peripheral to memory
@@ -112,20 +141,6 @@ impl DcmiWrapper {
             w.bits(FRAME_XFER_WORD_COUNT)
         });
 
-        // TODO this is probably unacceptable as the buffer address is not pinned?
-        let mem0_addr: u32 = (&self.image_buf1 as *const ImageFrameBuf) as u32;
-        let mem1_addr: u32 = (&self.image_buf2 as *const ImageFrameBuf) as u32;
-
-        stream1_chan1.m0ar.write(|w| w.bits(mem0_addr));
-        stream1_chan1.m1ar.write(|w| w.bits(mem1_addr));
-
-        //TODO wire dcmi_ctrl_pins and dcmi_data_pins to DMA:
-        // DMA2: Stream1, Channel_1 -> DCMI
-        // DoubleBufferMode
-
-        //Enable DMA2 clock
-        &(*pac::RCC::ptr()).ahb1enr.write(|w| w.dma2en().enabled() );
-
     }
 
     /// Configure the DCMI peripheral for continuous capture
@@ -150,42 +165,56 @@ impl DcmiWrapper {
             .bits(0x00)
         });
 
-        //enable clock for DCMI peripheral
-        &(*pac::RCC::ptr()).ahb2enr
-            .modify(|_, w| w.dcmien().enabled());
+    }
+
+
+    unsafe fn enable_dcmi_capture() {
+        let mut dcmi_periph = &(*pac::DCMI::ptr());
+
+        dcmi_periph.cr.modify(|_, w|
+            w.capture().set_bit().enable().set_bit());
 
         // enable interrupt on frame capture completion
         dcmi_periph.ier.modify(|_, w| w.frame_ie().set_bit());
+    }
 
-        //TODO verify this is how we enable capturing
-        dcmi_periph.cr.modify(|_, w| w.capture().set_bit().enable().set_bit());
-
+    unsafe fn enable_dma2() {
+        let mut stream1_chan1 = &(*pac::DMA2::ptr()).st[1];
+        stream1_chan1.cr.modify(|_, w| w
+            // enable stream
+            .en().enabled()
+            // Transfer complete interrupt enable
+            .tcie().enabled()
+            // Half transfer interrupt enable
+            .htie().enabled()
+        );
     }
 }
 
 pub static DCMI_DMA_IT_COUNT: AtomicUsize = AtomicUsize::new(0);
 
-/// Call this from DMA2_Stream1_IRQHandler interrupt
+/// Call this from DMA2_STREAM1 interrupt
 pub fn dma2_stream1_irqhandler()
 {
     // dma2 transfer from DCMI to memory completed
     DCMI_DMA_IT_COUNT.fetch_add(1, Ordering::Relaxed);
 
     unsafe {
-        // Clear DMA_IT_TCIF1
-        //CTCIFx: Streamx clear transfer complete interrupt flag (x=3..0)
+        //clear any interrupt pending bits
         // Writing 1 to this bit clears the corresponding TCIFx flag in the DMA_LISR register
-        &(*pac::DMA2::ptr()).lifcr.write(|w| w.ctcif1().set_bit());
+        &(*pac::DMA2::ptr()).lifcr.write(|w| w
+            .ctcif1().set_bit()
+            .chtif1().set_bit()
+        );
 
         //TODO process frame data somehow? move to next buffer ?
-
     }
 
 }
 
 pub static DCMI_CAP_COUNT: AtomicUsize = AtomicUsize::new(0);
 
-/// Call this from DCMI_IRQHandler interrupt
+/// Call this from DCMI interrupt
 pub fn dcmi_irqhandler()
 {
     DCMI_CAP_COUNT.fetch_add(1, Ordering::Relaxed);

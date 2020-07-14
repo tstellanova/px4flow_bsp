@@ -78,7 +78,7 @@ pub fn setup_peripherals() -> (
     // board-internal i2c2 port used for MT9V034 configuration
     // and serial EEPROM
     let i2c2_port = {
-        //TODO on discovery board we need internal pullups enabled: internal_pull_up(true)
+        //TODO on discovery board we need internal pullups enabled: `internal_pull_up(true)`
         let scl = gpiob.pb10.into_alternate_af4()
             .set_speed(Speed::Low)
             .set_open_drain(); //J2C2_SCL
@@ -106,6 +106,7 @@ pub fn setup_peripherals() -> (
     // SPI gyro chip select
     let mut spi_cs_gyro = gpiob.pb12.into_push_pull_output();
     let _ = spi_cs_gyro.set_high();
+
 
     // DCMI control pins
     let dcmi_ctrl_pins = {
@@ -136,16 +137,16 @@ pub fn setup_peripherals() -> (
     // DCMI digital camera interface pins (AF13)
     // this board supports ten parallel lines D0-D9
     let dcmi_data_pins = (
-        gpioc.pc6.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D0
-        gpioc.pc7.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D1
-        gpioe.pe0.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D2
-        gpioe.pe1.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D3
-        gpioe.pe4.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D4
-        gpiob.pb6.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D5
-        gpioe.pe5.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D6
-        gpioe.pe6.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D7
-        gpioc.pc10.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh), // DCMI_D8
-        gpioc.pc12.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh), // DCMI_D9
+        gpioc.pc6.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(),  // DCMI_D0
+        gpioc.pc7.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(),  // DCMI_D1
+        gpioe.pe0.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(),  // DCMI_D2
+        gpioe.pe1.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(),  // DCMI_D3
+        gpioe.pe4.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(),  // DCMI_D4
+        gpiob.pb6.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(),  // DCMI_D5
+        gpioe.pe5.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(),  // DCMI_D6
+        gpioe.pe6.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(),  // DCMI_D7
+        gpioc.pc10.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(), // DCMI_D8
+        gpioc.pc12.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(), // DCMI_D9
     );
 
     //configure PA2, PA3 as EXPOSURE and STANDBY PP output lines 2MHz
@@ -246,23 +247,27 @@ pub type SpiGyroCsn =
 /// - horizontal synchronization line, DCMI_HSYNC,
 /// - vertical synchronization line,  DCMI_VSYNC, with a programmable polarity.
 pub type DcmiCtrlPins = (
-    p_hal::gpio::gpioa::PA6<p_hal::gpio::Input<p_hal::gpio::PullUp>>, //DCMI_PIXCK
-    p_hal::gpio::gpioa::PA4<p_hal::gpio::Input<p_hal::gpio::PullUp>>, //DCMI_HSYNC
-    p_hal::gpio::gpiob::PB7<p_hal::gpio::Input<p_hal::gpio::PullUp>>, //DCMI_VSYNC
+    p_hal::gpio::gpioa::PA6<DcmiControlPin>, //DCMI_PIXCK
+    p_hal::gpio::gpioa::PA4<DcmiControlPin>, //DCMI_HSYNC
+    p_hal::gpio::gpiob::PB7<DcmiControlPin>, //DCMI_VSYNC
 );
+pub type DcmiControlPin = p_hal::gpio::Input<p_hal::gpio::PullUp>;
+
+// pub type DcmiDataInnerPin = p_hal::gpio::Alternate<p_hal::gpio::AF13>;
+pub type DcmiParallelDataPin = p_hal::gpio::Input<p_hal::gpio::PullUp>;
 
 /// Parallel image data lines for DCMI
 pub type DcmiDataPins = (
-    p_hal::gpio::gpioc::PC6<p_hal::gpio::Alternate<p_hal::gpio::AF13>>, // D0
-    p_hal::gpio::gpioc::PC7<p_hal::gpio::Alternate<p_hal::gpio::AF13>>, // D1
-    p_hal::gpio::gpioe::PE0<p_hal::gpio::Alternate<p_hal::gpio::AF13>>, // D2
-    p_hal::gpio::gpioe::PE1<p_hal::gpio::Alternate<p_hal::gpio::AF13>>, // D3
-    p_hal::gpio::gpioe::PE4<p_hal::gpio::Alternate<p_hal::gpio::AF13>>, // D4
-    p_hal::gpio::gpiob::PB6<p_hal::gpio::Alternate<p_hal::gpio::AF13>>, // D5
-    p_hal::gpio::gpioe::PE5<p_hal::gpio::Alternate<p_hal::gpio::AF13>>, // D6
-    p_hal::gpio::gpioe::PE6<p_hal::gpio::Alternate<p_hal::gpio::AF13>>, // D7
-    p_hal::gpio::gpioc::PC10<p_hal::gpio::Alternate<p_hal::gpio::AF13>>, // D8
-    p_hal::gpio::gpioc::PC12<p_hal::gpio::Alternate<p_hal::gpio::AF13>>, // D9
+    p_hal::gpio::gpioc::PC6<DcmiParallelDataPin>, // D0
+    p_hal::gpio::gpioc::PC7<DcmiParallelDataPin>, // D1
+    p_hal::gpio::gpioe::PE0<DcmiParallelDataPin>, // D2
+    p_hal::gpio::gpioe::PE1<DcmiParallelDataPin>, // D3
+    p_hal::gpio::gpioe::PE4<DcmiParallelDataPin>, // D4
+    p_hal::gpio::gpiob::PB6<DcmiParallelDataPin>, // D5
+    p_hal::gpio::gpioe::PE5<DcmiParallelDataPin>, // D6
+    p_hal::gpio::gpioe::PE6<DcmiParallelDataPin>, // D7
+    p_hal::gpio::gpioc::PC10<DcmiParallelDataPin>, // D8
+    p_hal::gpio::gpioc::PC12<DcmiParallelDataPin>, // D9
 );
 
 pub type LedOutputPin = p_hal::gpio::gpioe::PE<Output<PushPull>>;
