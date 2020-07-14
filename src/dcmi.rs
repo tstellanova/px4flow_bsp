@@ -61,7 +61,8 @@ impl DcmiWrapper {
         //NOTE(unsafe) This executes only once during initialization
 
         #[cfg(feature = "rttdebug")]
-        rprintln!("dcmi::setup start");
+        rprintln!("dcmi::setup start: {}, {}",FULL_FRAME_PIXEL_COUNT, FRAME_XFER_WORD_COUNT);
+
 
         unsafe {
             // enable peripheral clocks for DCMI and DMA2
@@ -82,6 +83,12 @@ impl DcmiWrapper {
             pac::NVIC::unpend(pac::Interrupt::DMA2_STREAM1);
             pac::NVIC::unpend(pac::Interrupt::DCMI);
             unsafe {
+                //    NVIC_SetPriority(DMA2_Stream1_IRQn, IRQ_PRI_DMA21);
+                // pac::NVIC::set_priority(pac::Interrupt::DMA2_STREAM1, 21);
+                // pac::NVIC::set_priority(pac::Interrupt::DCMI, 5);
+
+
+                //    NVIC_SetPriority(DCMI_IRQn, IRQ_PRI_DCMI);
                 pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1);
                 pac::NVIC::unmask(pac::Interrupt::DCMI);
             }
@@ -106,35 +113,44 @@ impl DcmiWrapper {
         let mem0_addr: u32 = (&IMG_BUF1 as *const ImageFrameBuf) as u32;
         let mem1_addr: u32 = (&IMG_BUF2 as *const ImageFrameBuf) as u32;
 
+        // currently we can't easily coerce pointers to u32 in const context,
+        // but here's how we would calculate the DCMI peripheral address for DMA:
+        //const DCMI_BASE: *const pac::dcmi::RegisterBlock = pac::DCMI::ptr(); //0x5005_0000
+        //const DCMI_PERIPH_ADDR: u32 = DCMI_BASE.wrapping_offset(0x28) as u32;// "0x28 - data register"
+        const DCMI_PERIPH_ADDR: u32 = 0x5005_0028;
+
         stream1_chan1.m0ar.write(|w| w.bits(mem0_addr));
         stream1_chan1.m1ar.write(|w| w.bits(mem1_addr));
+        stream1_chan1.par.write(|w| w.bits(DCMI_PERIPH_ADDR));
 
         // init dma2 stream1
-        stream1_chan1.cr.modify(|_, w| {
-            w.chsel() // ch1
-                .bits(1)
-                .dir() // transferring peripheral to memory
-                .peripheral_to_memory()
-                .pinc()// do not increment peripheral
-                .fixed()
-                .minc()// increment memory
-                .incremented()
-                .psize().bits32() // 32 bit (word) peripheral data size  DMA_PeripheralDataSize_Word
-                .msize().bits32()// 32 bit (word) memory data size  DMA_MemoryDataSize_Word
-                .circ()// enable circular mode
-                .enabled()
-                .pl()// high priority
-                .high()
-                .mburst()// single memory burst
-                .single()
-                .pburst()// single peripheral burst
-                .single()
+        stream1_chan1.cr.modify(|_, w| { w
+            // select ch1
+            .chsel().bits(1)
+            // transferring peripheral to memory
+            .dir().peripheral_to_memory()
+            // do not increment peripheral address
+            .pinc().fixed()
+            // increment memory address
+            .minc().incremented()
+            // 32 bit (word) peripheral data size DMA_PeripheralDataSize_Word
+            .psize().bits32()
+            // 32 bit (word) memory data size DMA_MemoryDataSize_Word
+            .msize().bits32()
+            // enable circular mode
+            .circ().enabled()
+            // high priority
+            .pl().high()
+            // single memory burst
+            .mburst().single()
+            // single peripheral burst
+            .pburst().single()
         });
-        stream1_chan1.fcr.write(|w| {
-            w.dmdis()// disable fifo mode
-                .disabled()
-                .fth()// fifo threshold full
-                .full()
+        stream1_chan1.fcr.modify(|_, w| { w
+            // disable fifo mode
+            .dmdis().disabled()
+            // fifo threshold full
+            .fth().full()
         });
         // Set number of items to transfer: number of 32 bit words
         stream1_chan1.ndtr.write(|w| {
