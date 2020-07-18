@@ -169,12 +169,12 @@ pub fn setup_peripherals() -> (
     //configure PA2, PA3 as EXPOSURE and STANDBY PP output lines 2MHz
     let mut exposure_line = gpioa
         .pa2 // TIM5_CH3_EXPOSURE
-        //.into_alternate_af2() // AF2 -> TIM5_CH3
+        .into_alternate_af2() // AF2 -> TIM5_CH3
         .into_push_pull_output()
         .set_speed(Speed::Low);
     let mut standby_line = gpioa
         .pa3 // TIM5_CH4_STANDBY
-        //.into_alternate_af2() // AF2 -> TIM5_CH4
+        .into_alternate_af2() // AF2 -> TIM5_CH4
         .into_push_pull_output()
         .set_speed(Speed::Low);
     //clear these lines:

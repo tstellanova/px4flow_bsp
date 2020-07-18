@@ -183,6 +183,7 @@ impl DcmiWrapper {
             .ovr_ie().set_bit()
             .vsync_ie().set_bit()
             .line_ie().set_bit()
+            .err_ie().set_bit()
         );
 
         self.dcmi.cr.modify(|_, w|
