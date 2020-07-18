@@ -80,11 +80,14 @@ pub fn setup_peripherals() -> (
     // board-internal i2c2 port used for MT9V034 configuration
     // and serial EEPROM
     let i2c2_port = {
-        //TODO on discovery board we need internal pullups enabled: `internal_pull_up(true)`
+        // on the actual px4flow hw, there are external pullups on the i2c lines;
+        // however, stm32f407 breakout boards do not have these, so we add an internal pullup.
         let scl = gpiob.pb10.into_alternate_af4()
+            .internal_pull_up(true)
             .set_speed(Speed::Low)
             .set_open_drain(); //J2C2_SCL
         let sda = gpiob.pb11.into_alternate_af4()
+            .internal_pull_up(true)
             .set_speed(Speed::Low)
             .set_open_drain(); //J2C2_SDA
         p_hal::i2c::I2c::i2c2(dp.I2C2, (scl, sda), 100.khz(), clocks)
@@ -192,8 +195,7 @@ pub fn setup_peripherals() -> (
         gpioc.pc8.into_alternate_af2(),
         gpioc.pc9.into_alternate_af2(), //unused
     );
-    let pwm = pwm::tim3(dp.TIM3, channels, clocks, 24u32.mhz());
-    let (mut ch1, _ch2) = pwm;
+    let (mut ch1, _ch2) = pwm::tim3(dp.TIM3, channels, clocks, 24u32.mhz());
     let max_duty = ch1.get_max_duty();
     let duty_avg =  (max_duty / 2) + 1;
 
@@ -202,7 +204,6 @@ pub fn setup_peripherals() -> (
 
     ch1.set_duty(duty_avg);
     ch1.enable();
-    core::mem::forget(ch1);//free running forevermore
 
     #[cfg(feature = "rttdebug")]
     rprintln!("TIM3 XCLK config done");
