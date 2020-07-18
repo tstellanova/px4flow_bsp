@@ -195,7 +195,7 @@ pub fn setup_peripherals() -> (
     let pwm = pwm::tim3(dp.TIM3, channels, clocks, 24u32.mhz());
     let (mut ch1, _ch2) = pwm;
     let max_duty = ch1.get_max_duty();
-    let duty_avg = (max_duty / 2) + 1;
+    let duty_avg =  (max_duty / 2) + 1;
 
     #[cfg(feature = "rttdebug")]
     rprintln!("duty cycle: {} max: {}", duty_avg, max_duty);

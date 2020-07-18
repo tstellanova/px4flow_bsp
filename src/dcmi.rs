@@ -23,9 +23,6 @@ pub struct DcmiWrapper {
     frame_height: usize,
     dcmi: pac::DCMI,
     dma2: pac::DMA2,
-    // image_buf1: ImageFrameBuf,
-    // image_buf2: ImageFrameBuf,
-    // image_buf3: ImageFrameBuf,
 }
 
 
@@ -40,9 +37,6 @@ impl DcmiWrapper {
         Self {
             frame_width: FULL_FRAME_ROW_WIDTH,
             frame_height: FULL_FRAME_COL_HEIGHT,
-            // image_buf1: [0; FULL_FRAME_PIXEL_COUNT],
-            // image_buf2: [0; FULL_FRAME_PIXEL_COUNT],
-            // image_buf3: [0; FULL_FRAME_PIXEL_COUNT],
             dcmi,
             dma2
         }
@@ -72,21 +66,23 @@ impl DcmiWrapper {
             self.setup_dma2();
             self.enable_dcmi_capture();
             self.enable_dma2();
+
+            #[cfg(feature = "rttdebug")]
+            {
+                rprintln!("dcmi cr: 0x{:x}",self.dcmi.cr.read().bits());
+            }
+
         }
 
-        // cortex_m::interrupt::free(|_| {
-        //     // enable interrupts for DMA2 transfer and DCMI capture completion
-        //     pac::NVIC::unpend(pac::Interrupt::DMA2_STREAM1);
-        //     pac::NVIC::unpend(pac::Interrupt::DCMI);
-        //     unsafe {
-        //         //TODO set priority on dcmi and dma2?
-        //         // pac::NVIC::set_priority(pac::Interrupt::DMA2_STREAM1, 21);
-        //         // pac::NVIC::set_priority(pac::Interrupt::DCMI, 5);
-        //
-        //         pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1);
-        //         pac::NVIC::unmask(pac::Interrupt::DCMI);
-        //     }
-        // });
+        cortex_m::interrupt::free(|_| {
+            // enable interrupts for DMA2 transfer and DCMI capture completion
+            pac::NVIC::unpend(pac::Interrupt::DMA2_STREAM1);
+            pac::NVIC::unpend(pac::Interrupt::DCMI);
+            unsafe {
+                pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1);
+                pac::NVIC::unmask(pac::Interrupt::DCMI);
+            }
+        });
 
         #[cfg(feature = "rttdebug")]
         rprintln!("dcmi::setup done");
@@ -173,14 +169,24 @@ impl DcmiWrapper {
             .edm() // extended data mode: 8 bit
             .bits(0x00)
         });
+
+        #[cfg(feature = "rttdebug")]
+        rprintln!("dcmi cr: 0x{:x}",self.dcmi.cr.read().bits());
+
     }
 
     unsafe fn enable_dcmi_capture(&mut self) {
-        self.dcmi.cr.modify(|_, w|
-            w.capture().set_bit().enable().set_bit());
 
         // enable interrupt on frame capture completion
-        self.dcmi.ier.modify(|_, w| w.frame_ie().set_bit());
+        self.dcmi.ier.modify(|_, w|  w
+            .frame_ie().set_bit()
+            .ovr_ie().set_bit()
+            .vsync_ie().set_bit()
+            .line_ie().set_bit()
+        );
+
+        self.dcmi.cr.modify(|_, w|
+            w.capture().set_bit().enable().set_bit());
     }
 
     unsafe fn enable_dma2(&mut self) {
@@ -201,6 +207,11 @@ impl DcmiWrapper {
 
     pub fn dma_transfer_finished(&mut self) -> bool {
         self.dma2.lisr.read().tcif1().bit_is_set()
+    }
+
+    pub fn dcmi_raw_status(&mut self) -> u32 {
+
+        self.dcmi.ris.read().bits()
     }
 }
 

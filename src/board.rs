@@ -30,6 +30,9 @@ pub struct Board<'a> {
 
 impl Board<'_> {
     pub fn new() -> Self {
+        #[cfg(feature = "rttdebug")]
+        rprintln!("new board");
+
         let (
             raw_user_leds,
             mut delay_source,
@@ -51,14 +54,17 @@ impl Board<'_> {
         //  we should treat it as a shared bus
         let i2c1_bus_mgr = shared_bus::CortexMBusManager::new(i2c1_port);
 
-        let old_gyro_csn = OldOutputPin::new(spi_cs_gyro);
         let mut gyro_opt: Option<_> = None;
-        if let Ok(mut gyro) = L3gd20::new(spi2_port, old_gyro_csn) {
-            if let Ok(device_id) = gyro.who_am_i() {
-                if device_id == 0xD4 {
-                    #[cfg(feature = "rttdebug")]
-                    rprintln!("gyro setup done");
-                    gyro_opt = Some(gyro)
+        #[cfg(not(feature="breakout"))]
+        {
+            let old_gyro_csn = OldOutputPin::new(spi_cs_gyro);
+            if let Ok(mut gyro) = L3gd20::new(spi2_port, old_gyro_csn) {
+                if let Ok(device_id) = gyro.who_am_i() {
+                    if device_id == 0xD4 {
+                        #[cfg(feature = "rttdebug")]
+                        rprintln!("gyro setup done");
+                        gyro_opt = Some(gyro)
+                    }
                 }
             }
         }
@@ -69,24 +75,28 @@ impl Board<'_> {
                 shared_bus::CortexMBusManager::new(i2c2_port)
             ).unwrap();
 
-        #[cfg(feature = "rttdebug")]
-        rprintln!("eeprom setup start");
-        let eeprom_i2c_address = eeprom24x::SlaveAddr::default();
-        const PARAM_ADDRESS: u32 = 0x1234;
 
-        let mut eeprom = Eeprom24x::new_24x128(i2c2_bus_mgr.acquire(), eeprom_i2c_address);
-        eeprom.write_byte(PARAM_ADDRESS, 0xAA).unwrap();
-        delay_source.delay_ms(5u8);
+        let mut  eeprom_opt = None;
+        #[cfg(not(feature = "breakout"))]
+        {
+            #[cfg(feature = "rttdebug")]
+            rprintln!("eeprom setup start");
+            let eeprom_i2c_address = eeprom24x::SlaveAddr::default();
+            const PARAM_ADDRESS: u32 = 0x1234;
 
-        let read_data = eeprom.read_byte(PARAM_ADDRESS).unwrap();
-        #[cfg(feature = "rttdebug")]
-        rprintln!("eeprom data: 0x{:X}", read_data);
-        let eeprom_opt = Some(eeprom);
+            let mut eeprom = Eeprom24x::new_24x128(i2c2_bus_mgr.acquire(), eeprom_i2c_address);
+            eeprom.write_byte(PARAM_ADDRESS, 0xAA).unwrap();
+            delay_source.delay_ms(5u8);
+
+            let read_data = eeprom.read_byte(PARAM_ADDRESS).unwrap();
+            #[cfg(feature = "rttdebug")]
+            rprintln!("eeprom data: 0x{:X}", read_data);
+            let eeprom_opt = Some(eeprom);
+        }
 
         //
         let mut dcmi_wrap = DcmiWrapper::new(dcmi, dma2);
         dcmi_wrap.setup();
-
 
 
         #[cfg(feature = "breakout")]

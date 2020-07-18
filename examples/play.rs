@@ -79,12 +79,16 @@ fn main() -> ! {
             let _ = board.user_leds[1].toggle(); //blue
         }
 
-        if let Some(foo) = board.dcmi_wrap.as_mut() {
-            if foo.dcmi_capture_finished() {
+        if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
+            if dcmi_wrap.dcmi_capture_finished() {
                 rprintln!("cap finished!");
             }
-            if foo.dma_transfer_finished() {
+            if dcmi_wrap.dma_transfer_finished() {
                 rprintln!("xfer finished!");
+            }
+            let ris =  dcmi_wrap.dcmi_raw_status();
+            if 0 != ris {
+                rprintln!("cap ris: 0x{:x}",ris);
             }
         }
 

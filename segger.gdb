@@ -19,9 +19,9 @@ monitor speed auto
 
 # break DefaultHandler
 break HardFault
-#break px4flow_bsp::dcmi::setup_dcmi
 
 #break main
+#break Board::new
 
 # don't confirm when quitting debugger
 define hook-quit
