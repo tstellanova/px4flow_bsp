@@ -118,21 +118,18 @@ pub fn setup_peripherals() -> (
         let pixck = gpioa
             .pa6 // DCMI_PIXCK
             .into_alternate_af13()
-            .internal_pull_up(true)
             .set_speed(Speed::VeryHigh) // 100 MHz Pullup
             .into_pull_up_input();
 
         let hsync = gpioa
             .pa4 // DCMI_HSYNC
             .into_alternate_af13()
-            .internal_pull_up(true)
             .set_speed(Speed::VeryHigh) // s/b 100 MHz Pullup
             .into_pull_up_input();
 
         let vsync = gpiob
             .pb7 // DCMI_VSYNC
             .into_alternate_af13()
-            .internal_pull_up(true)
             .set_speed(Speed::VeryHigh) //s/b 100 MHz Pullup
             .into_pull_up_input();
 
