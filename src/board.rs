@@ -105,7 +105,7 @@ impl Board<'_> {
             let base_i2c_address=    mt9v034_i2c::PX4FLOW_CAM_ADDRESS;
         let mut cam_config =
             Mt9v034::new(i2c2_bus_mgr.acquire(), base_i2c_address);
-        cam_config.setup().expect("could not configure MT9V034");
+        cam_config.setup(&mut delay_source).expect("could not configure MT9V034");
 
         Self {
             external_i2c1: i2c1_bus_mgr,
