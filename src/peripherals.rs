@@ -43,7 +43,7 @@ pub fn setup_peripherals() -> (
     pac::DCMI
 ) {
     let mut dp = pac::Peripherals::take().unwrap();
-    let cp = cortex_m::Peripherals::take().unwrap();
+    let mut cp = cortex_m::Peripherals::take().unwrap();
 
     // Set up the system clock
     let mut rcc = dp.RCC.constrain();
@@ -95,9 +95,6 @@ pub fn setup_peripherals() -> (
         p_hal::i2c::I2c::i2c2(dp.I2C2, (scl, sda), 100.khz(), clocks)
     };
 
-
-    // configure USART2 and USART3
-
     let usart2_port = {
         //TODO usart2 has HW flow control
         let config =
@@ -137,6 +134,7 @@ pub fn setup_peripherals() -> (
     let _ = spi_cs_gyro.set_high();
 
 
+    // RCC_AHB2PeriphClockCmd(RCC_AHB2Periph_DCMI, ENABLE);
 
     // DCMI control pins
     let dcmi_ctrl_pins = {
@@ -183,6 +181,9 @@ pub fn setup_peripherals() -> (
             .modify(|_, w| w.dcmien().enabled());
         &(*pac::RCC::ptr()).ahb1enr
             .modify(|_, w| w.dma2en().enabled());
+
+        //TODO ? preset priorities for DCMI-DMA2 related interrupts
+        //cp.NVIC.set_priority(pac::Interrupt::DMA2_STREAM1, 5);
     }
 
     let dcmi = dp.DCMI;
@@ -243,6 +244,22 @@ pub fn setup_peripherals() -> (
 }
 
 
+// fn calc_irq_priority(preempt_priority: u8, subpriority: u8) -> u32 {
+//     tmppriority: u8 = 0x00;
+//     tmppre: u8 = 0x00;
+//     tmpsub: u8 = 0x0F;
+//
+//     tmppriority = (0x700 - ((SCB->AIRCR) & (uint32_t)0x700))>> 0x08;
+//     tmppre = (0x4 - tmppriority);
+//     tmpsub = tmpsub >> tmppriority;
+//
+//     tmppriority = preempt_priority << tmppre;
+//     tmppriority |=  (uint8_t)(subpriority & tmpsub);
+//
+//     tmppriority = tmppriority << 0x04;
+//
+//     tmppriority
+// }
 
 
 /// I2C1 port used for external communication

@@ -42,54 +42,29 @@ impl DcmiWrapper {
         }
     }
 
-    /// Dump count of captures and dma transfers to rtt
-    pub fn dump_counts() {
-        #[cfg(feature = "rttdebug")]
-        {
-            let cap_count = DCMI_CAP_COUNT.load(Ordering::Relaxed);
-            let xfer_count = DCMI_DMA_IT_COUNT.load(Ordering::Relaxed);
-            if cap_count > 0 {
-                rprintln!("caps: {} xfers: {}", cap_count, xfer_count);
-            }
-        }
-    }
-
-    /// Setup dcmi and associated DMA
+    /// Setup DCMI and associated DMA
     pub fn setup(&mut self) {
-        //NOTE(unsafe) This executes only once during initialization
 
         #[cfg(feature = "rttdebug")]
         rprintln!("dcmi::setup start: {}, {}",FULL_FRAME_PIXEL_COUNT, FRAME_XFER_WORD_COUNT);
 
+        //NOTE(unsafe) This executes only once during initialization
         unsafe {
-            self.setup_dcmi();
-            self.setup_dma2();
-            self.enable_dcmi_capture();
-            self.enable_dma2();
+            self.init_dcmi();
+            self.init_dma2();
+            self.enable_dcmi_and_dma();
 
             #[cfg(feature = "rttdebug")]
             {
                 rprintln!("dcmi cr: 0x{:x}",self.dcmi.cr.read().bits());
             }
-
         }
-
-        cortex_m::interrupt::free(|_| {
-            // enable interrupts for DMA2 transfer and DCMI capture completion
-            pac::NVIC::unpend(pac::Interrupt::DMA2_STREAM1);
-            pac::NVIC::unpend(pac::Interrupt::DCMI);
-            unsafe {
-                pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1);
-                pac::NVIC::unmask(pac::Interrupt::DCMI);
-            }
-        });
-
         #[cfg(feature = "rttdebug")]
         rprintln!("dcmi::setup done");
     }
 
     /// Configure DMA2 for DCMI peripheral -> memory transfer
-    unsafe fn setup_dma2(&mut self) {
+    unsafe fn init_dma2(&mut self) {
         //configure DMA2, stream 1, channel 1 for DCMI peripheral -> memory
         let mut stream1_chan1 = &self.dma2.st[1];
         //configure double-buffer mode
@@ -99,14 +74,14 @@ impl DcmiWrapper {
             // select Memory0 initially
             .ct().memory0());
 
-        // TODO this is probably unacceptable as the buffer address is not pinned?
+        // TODO verify acceptable if the buffer address is not pinned
         let mem0_addr: u32 = (&IMG_BUF1 as *const ImageFrameBuf) as u32;
         let mem1_addr: u32 = (&IMG_BUF2 as *const ImageFrameBuf) as u32;
 
         // currently we can't easily coerce pointers to u32 in const context,
         // but here's how we would calculate the DCMI peripheral address for DMA:
         //const DCMI_BASE: *const pac::dcmi::RegisterBlock = pac::DCMI::ptr(); //0x5005_0000
-        //const DCMI_PERIPH_ADDR: u32 = DCMI_BASE.wrapping_offset(0x28) as u32;// "0x28 - data register"
+        //const DCMI_PERIPH_ADDR: u32 = DCMI_BASE.wrapping_offset(0x28) as u32;// "0x28 - data register DR"
         const DCMI_PERIPH_ADDR: u32 = 0x5005_0028;
 
         stream1_chan1.m0ar.write(|w| w.bits(mem0_addr));
@@ -150,7 +125,7 @@ impl DcmiWrapper {
     }
 
     /// Configure the DCMI peripheral for continuous capture
-    unsafe fn setup_dcmi(&mut self)
+    unsafe fn init_dcmi(&mut self)
     {
         //basic DCMI configuration
         self.dcmi.cr.modify(|_, w| { w
@@ -172,25 +147,16 @@ impl DcmiWrapper {
 
         #[cfg(feature = "rttdebug")]
         rprintln!("dcmi cr: 0x{:x}",self.dcmi.cr.read().bits());
-
     }
 
-    unsafe fn enable_dcmi_capture(&mut self) {
-
-        // enable interrupt on frame capture completion
-        self.dcmi.ier.modify(|_, w|  w
-            .frame_ie().set_bit()
-            .ovr_ie().set_bit()
-            .vsync_ie().set_bit()
-            .line_ie().set_bit()
-            .err_ie().set_bit()
-        );
-
-        self.dcmi.cr.modify(|_, w|
-            w.capture().set_bit().enable().set_bit());
+    /// Enable DMA2 and DCMI after setup
+    unsafe fn enable_dcmi_and_dma(&mut self) {
+        self.enable_dma2_stream1();
+        self.enable_dcmi();
+        self.enable_dma_interrupts();
     }
 
-    unsafe fn enable_dma2(&mut self) {
+    unsafe fn enable_dma2_stream1(&mut self) {
         let mut stream1_chan1 = &self.dma2.st[1];
         stream1_chan1.cr.modify(|_, w| w
             // enable stream
@@ -199,6 +165,48 @@ impl DcmiWrapper {
             .tcie().enabled()
             // Half transfer interrupt enable
             .htie().enabled()
+        );
+    }
+
+    unsafe fn enable_dcmi(&mut self) {
+        self.dcmi.cr.modify(|_, w| w
+            // enable the interface:
+            .enable().set_bit()
+            // enable capturing:
+            .capture().set_bit());
+    }
+
+
+    // unsafe fn enable_dcmi_interrupts(&mut self) {
+    //     cortex_m::interrupt::free(|_| {
+    //         // enable interrupts DCMI capture completion
+    //         pac::NVIC::unpend(pac::Interrupt::DCMI);
+    //         unsafe {
+    //             pac::NVIC::unmask(pac::Interrupt::DCMI);
+    //         }
+    //     });
+    //
+    //     self.dcmi.ier.modify(|_, w|  w
+    //         // frame capture completion interrupt
+    //         .frame_ie().set_bit()
+    //     );
+    // }
+
+    unsafe fn enable_dma_interrupts(&mut self) {
+        cortex_m::interrupt::free(|_| {
+            // enable interrupts for DMA2 transfer completion
+            pac::NVIC::unpend(pac::Interrupt::DMA2_STREAM1);
+            unsafe {
+                pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1);
+            }
+        });
+
+        let mut stream1_chan1 = &self.dma2.st[1];
+        stream1_chan1.cr.modify(|_, w| w
+            // Half transfer interrupt enable
+            .htie().enabled()
+            // Transfer complete interrupt enable
+            .tcie().enabled()
         );
     }
 
@@ -211,8 +219,19 @@ impl DcmiWrapper {
     }
 
     pub fn dcmi_raw_status(&mut self) -> u32 {
-
         self.dcmi.ris.read().bits()
+    }
+
+    /// Dump count of captures and dma transfers to rtt
+    pub fn dump_counts() {
+        #[cfg(feature = "rttdebug")]
+            {
+                let cap_count = DCMI_CAP_COUNT.load(Ordering::Relaxed);
+                let xfer_count = DCMI_DMA_IT_COUNT.load(Ordering::Relaxed);
+                if cap_count > 0 {
+                    rprintln!("caps: {} xfers: {}", cap_count, xfer_count);
+                }
+            }
     }
 }
 
