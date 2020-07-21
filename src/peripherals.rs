@@ -35,6 +35,8 @@ pub fn setup_peripherals() -> (
     I2c2Port,
     Spi2Port,
     SpiGyroCsn,
+    Usart2Port,
+    Usart3Port,
     DcmiCtrlPins,
     DcmiDataPins,
     pac::DMA2,
@@ -45,7 +47,7 @@ pub fn setup_peripherals() -> (
 
     // Set up the system clock
     let mut rcc = dp.RCC.constrain();
-    let clocks = rcc
+    let mut clocks = rcc
         .cfgr
         .use_hse(24.mhz()) // 24 MHz xtal
         .sysclk(168.mhz()) // HCLK
@@ -63,7 +65,7 @@ pub fn setup_peripherals() -> (
     let gpioa = dp.GPIOA.split();
     let gpiob = dp.GPIOB.split();
     let gpioc = dp.GPIOC.split();
-    // let gpiod = dp.GPIOD.split();
+    let mut gpiod = dp.GPIOD.split();
     let gpioe = dp.GPIOE.split();
 
     let user_led0 = gpioe.pe2.into_push_pull_output().downgrade(); //amber
@@ -93,6 +95,28 @@ pub fn setup_peripherals() -> (
         p_hal::i2c::I2c::i2c2(dp.I2C2, (scl, sda), 100.khz(), clocks)
     };
 
+
+    // configure USART2 and USART3
+
+    let usart2_port = {
+        //TODO usart2 has HW flow control
+        let config =
+            p_hal::serial::config::Config::default().baudrate(115200.bps());
+        let tx = gpiod.pd5.into_alternate_af7();
+        let rx = gpiod.pd6.into_alternate_af7();
+        p_hal::serial::Serial::usart2(dp.USART2, (tx, rx), config, clocks).unwrap()
+    };
+
+    let usart3_port = {
+        //TODO usart3 has HW flow control
+        let config =
+            p_hal::serial::config::Config::default().baudrate(115200.bps());
+        let tx = gpiod.pd8.into_alternate_af7();
+        let rx = gpiod.pd9.into_alternate_af7();
+
+        p_hal::serial::Serial::usart3(dp.USART3, (tx, rx), config, clocks).unwrap()
+    };
+
     // used for gyro
     let spi2_port = {
         let sck = gpiob.pb13.into_alternate_af5();
@@ -111,6 +135,7 @@ pub fn setup_peripherals() -> (
     // SPI gyro chip select
     let mut spi_cs_gyro = gpiob.pb12.into_push_pull_output();
     let _ = spi_cs_gyro.set_high();
+
 
 
     // DCMI control pins
@@ -166,24 +191,20 @@ pub fn setup_peripherals() -> (
     //configure PA2, PA3 as EXPOSURE and STANDBY PP output lines 2MHz
     let mut exposure_line = gpioa
         .pa2 // TIM5_CH3_EXPOSURE
-        .into_alternate_af2() // AF2 -> TIM5_CH3
+        //.into_alternate_af2() // AF2 -> TIM5_CH3
         .into_push_pull_output()
         .set_speed(Speed::Low);
     let mut standby_line = gpioa
         .pa3 // TIM5_CH4_STANDBY
-        .into_alternate_af2() // AF2 -> TIM5_CH4
+        //.into_alternate_af2() // AF2 -> TIM5_CH4
         .into_push_pull_output()
         .set_speed(Speed::Low);
     //clear these lines:
     let _ = exposure_line.set_low();
     let _ = standby_line.set_low();
     //The sensor goes into standby mode by setting STANDBY to HIGH.
-    //TODO no need to configure CAM_NRESET / PA5 ?
 
-    // //TODO check TIM5 clock rate/ configuration with above AF2 channels
-    // let mut tim5 = Timer::tim5(dp.TIM5, 2.mhz(), clocks);
-    // tim5.start(2.mhz());
-    // core::mem::forget(tim5);
+    //CAM_NRESET / PA5  is unused
 
     // Supply an XCLK (external clock) signal to MT9V034 using PWM.
     // PX4FLOW schematic PC8 is marked TIM8_CH3_MASTERCLOCK,
@@ -212,6 +233,8 @@ pub fn setup_peripherals() -> (
         i2c2_port,
         spi2_port,
         spi_cs_gyro,
+        usart2_port,
+        usart3_port,
         dcmi_ctrl_pins,
         dcmi_data_pins,
         dma2,
@@ -287,4 +310,10 @@ pub type DcmiDataPins = (
 pub type LedOutputPin = p_hal::gpio::gpioe::PE<Output<PushPull>>;
 pub type DelaySource = p_hal::delay::Delay;
 
+pub type Usart2Port = p_hal::serial::Serial<pac::USART2,
+    (p_hal::gpio::gpiod::PD5<p_hal::gpio::Alternate<p_hal::gpio::AF7>>,
+    p_hal::gpio::gpiod::PD6<p_hal::gpio::Alternate<p_hal::gpio::AF7>>)>;
+pub type Usart3Port = p_hal::serial::Serial<pac::USART3,
+    (p_hal::gpio::gpiod::PD8<p_hal::gpio::Alternate<p_hal::gpio::AF7>>,
+     p_hal::gpio::gpiod::PD9<p_hal::gpio::Alternate<p_hal::gpio::AF7>>)>;
 

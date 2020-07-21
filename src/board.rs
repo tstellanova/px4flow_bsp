@@ -25,7 +25,8 @@ pub struct Board<'a> {
     pub gyro: Option<GyroType>,
     pub eeprom: Option<EepromType<'a>>,
     pub dcmi_wrap: Option<DcmiWrapper>,
-    //TODO add external UARTs
+    pub usart2: Usart2Port,
+    pub usart3: Usart3Port,
 }
 
 impl Board<'_> {
@@ -40,6 +41,8 @@ impl Board<'_> {
             i2c2_port,
             spi2_port,
             spi_cs_gyro,
+            usart2,
+            usart3,
             dcmi_ctrl_pins,
             dcmi_data_pins,
             dma2,
@@ -49,6 +52,7 @@ impl Board<'_> {
         //TODO verify we are safe to forget the DCMI pins after configuration
         core::mem::forget(dcmi_ctrl_pins);
         core::mem::forget(dcmi_data_pins);
+
 
         // Since any number of devices could sit on the external i2c1 port,
         //  we should treat it as a shared bus
@@ -113,7 +117,9 @@ impl Board<'_> {
             gyro: gyro_opt,
             user_leds: [raw_user_leds.0, raw_user_leds.1, raw_user_leds.2],
             eeprom: eeprom_opt,
-            dcmi_wrap: Some(dcmi_wrap)
+            dcmi_wrap: Some(dcmi_wrap),
+            usart2,
+            usart3
         }
     }
 }
