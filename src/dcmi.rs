@@ -201,13 +201,13 @@ impl DcmiWrapper {
             }
         });
 
-        let mut stream1_chan1 = &self.dma2.st[1];
-        stream1_chan1.cr.modify(|_, w| w
+        self.dma2.st[1].cr.modify(|_, w| w
             // Half transfer interrupt enable
             .htie().enabled()
             // Transfer complete interrupt enable
             .tcie().enabled()
         );
+
     }
 
     pub fn dcmi_capture_finished(&mut self) -> bool {
@@ -225,13 +225,20 @@ impl DcmiWrapper {
     /// Dump count of captures and dma transfers to rtt
     pub fn dump_counts() {
         #[cfg(feature = "rttdebug")]
-            {
-                let cap_count = DCMI_CAP_COUNT.load(Ordering::Relaxed);
-                let xfer_count = DCMI_DMA_IT_COUNT.load(Ordering::Relaxed);
-                if cap_count > 0 {
-                    rprintln!("caps: {} xfers: {}", cap_count, xfer_count);
-                }
+        {
+            let cap_count = DCMI_CAP_COUNT.load(Ordering::Relaxed);
+            let xfer_count = DCMI_DMA_IT_COUNT.load(Ordering::Relaxed);
+            if xfer_count > 0 || cap_count > 0 {
+                rprintln!("caps: {} xfers: {}", cap_count, xfer_count);
             }
+        }
+    }
+
+    #[cfg(feature = "rttdebug")]
+    pub fn dump_imgbuf1() {
+        unsafe {
+            rprintln!("imgbuf1 {:x?}",&IMG_BUF1[0..4]);
+        }
     }
 }
 

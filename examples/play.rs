@@ -75,7 +75,6 @@ fn main() -> ! {
 
             }
 
-
             let _ = board.user_leds[1].toggle(); //blue
         }
 
@@ -93,6 +92,7 @@ fn main() -> ! {
         }
 
         DcmiWrapper::dump_counts();
+        //DcmiWrapper::dump_imgbuf1();
         let _ = board.user_leds[2].toggle(); //red
     }
 }
