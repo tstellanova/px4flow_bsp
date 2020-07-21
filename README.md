@@ -24,14 +24,13 @@ SWD and SWCLK pads noted on the bottom of the board appear to be swapped
 
 | Pin      | Configuration |
 | :--- | :--- | 
-| PA0      | "TIM5_CH1" (unused)       |
+| PA0      |  UART4_TX ("TIM5_CH1" - no connection)       |
 | PA1      | "TIM5_CH2" (unused)        |
 | PA2      | TIM5_CH3_EXPOSURE (pulled low)   |
 | PA3      | TIM5_CH4_STANDBY  (pulled low) |
 | PA4      | DCMI_HSYNC       |
-| PA5      | CAM_NRESET (unused)       |
+| PA5      | CAM_NRESET (tied to high)       |
 | PA6      | DCMI_PIXCK       |
-
 | PB6      | DCMI_D5       |
 | PB7      | DCMI_VSYNC       |
 | PB8      | I2C1 SCL       |
@@ -47,6 +46,7 @@ SWD and SWCLK pads noted on the bottom of the board appear to be swapped
 | PC8      | XCLK       |
 | PC9      | "TIM8_CH4_LED_OUT" (unused)     |
 | PC10     | DCMI_D8       |
+| PC11     | UART4_RX       |
 | PC12     | DCMI_D9       |
 | PD0      | TBD       |
 | PD5      | TBD       |

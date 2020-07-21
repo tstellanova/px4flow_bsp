@@ -27,6 +27,7 @@ pub struct Board<'a> {
     pub dcmi_wrap: Option<DcmiWrapper>,
     pub usart2: Usart2Port,
     pub usart3: Usart3Port,
+    pub uart4: Uart4Port,
 }
 
 impl Board<'_> {
@@ -43,6 +44,7 @@ impl Board<'_> {
             spi_cs_gyro,
             usart2,
             usart3,
+            uart4,
             dcmi_ctrl_pins,
             dcmi_data_pins,
             dma2,
@@ -119,7 +121,8 @@ impl Board<'_> {
             eeprom: eeprom_opt,
             dcmi_wrap: Some(dcmi_wrap),
             usart2,
-            usart3
+            usart3,
+            uart4
         }
     }
 }

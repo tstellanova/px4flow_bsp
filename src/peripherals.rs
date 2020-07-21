@@ -37,6 +37,7 @@ pub fn setup_peripherals() -> (
     SpiGyroCsn,
     Usart2Port,
     Usart3Port,
+    Uart4Port,
     DcmiCtrlPins,
     DcmiDataPins,
     pac::DMA2,
@@ -110,8 +111,15 @@ pub fn setup_peripherals() -> (
             p_hal::serial::config::Config::default().baudrate(115200.bps());
         let tx = gpiod.pd8.into_alternate_af7();
         let rx = gpiod.pd9.into_alternate_af7();
-
         p_hal::serial::Serial::usart3(dp.USART3, (tx, rx), config, clocks).unwrap()
+    };
+
+    let uart4_port = {
+        let config =
+            p_hal::serial::config::Config::default().baudrate(9600.bps());
+        let tx = gpioa.pa0.into_alternate_af8(); // UART4_TX normally unused (no connection)
+        let rx = gpioc.pc11.into_alternate_af8(); // UART4_RX
+        p_hal::serial::Serial::uart4(dp.UART4, (tx, rx), config, clocks).unwrap()
     };
 
     // used for gyro
@@ -236,6 +244,7 @@ pub fn setup_peripherals() -> (
         spi_cs_gyro,
         usart2_port,
         usart3_port,
+        uart4_port,
         dcmi_ctrl_pins,
         dcmi_data_pins,
         dma2,
@@ -327,10 +336,18 @@ pub type DcmiDataPins = (
 pub type LedOutputPin = p_hal::gpio::gpioe::PE<Output<PushPull>>;
 pub type DelaySource = p_hal::delay::Delay;
 
+pub type UsartIoPin = p_hal::gpio::Alternate<p_hal::gpio::AF7>;
+
 pub type Usart2Port = p_hal::serial::Serial<pac::USART2,
-    (p_hal::gpio::gpiod::PD5<p_hal::gpio::Alternate<p_hal::gpio::AF7>>,
-    p_hal::gpio::gpiod::PD6<p_hal::gpio::Alternate<p_hal::gpio::AF7>>)>;
+    (p_hal::gpio::gpiod::PD5<UsartIoPin>,
+    p_hal::gpio::gpiod::PD6<UsartIoPin>)>;
 pub type Usart3Port = p_hal::serial::Serial<pac::USART3,
-    (p_hal::gpio::gpiod::PD8<p_hal::gpio::Alternate<p_hal::gpio::AF7>>,
-     p_hal::gpio::gpiod::PD9<p_hal::gpio::Alternate<p_hal::gpio::AF7>>)>;
+    (p_hal::gpio::gpiod::PD8<UsartIoPin>,
+     p_hal::gpio::gpiod::PD9<UsartIoPin>)>;
+
+pub type UartIoPin = p_hal::gpio::Alternate<p_hal::gpio::AF8>;
+
+pub type Uart4Port = p_hal::serial::Serial<pac::UART4,
+    (p_hal::gpio::gpioa::PA0<UartIoPin>,
+     p_hal::gpio::gpioc::PC11<UartIoPin>)>;
 
