@@ -9,12 +9,17 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
 
-//TODO maybe these frame constants should be configurable?
-pub const MAX_FRAME_HEIGHT: usize = 480;
-pub const MAX_FRAME_WIDTH: usize = 752;
-pub const FULL_FRAME_ROW_WIDTH: usize = MAX_FRAME_WIDTH/4;
-pub const FULL_FRAME_COL_HEIGHT: usize = MAX_FRAME_HEIGHT/4;
-pub const FULL_FRAME_PIXEL_COUNT: usize = FULL_FRAME_ROW_WIDTH*FULL_FRAME_COL_HEIGHT;
+//TODO make frame constants configurable?
+
+// pub const MAX_FRAME_HEIGHT: usize = 480;
+// pub const MAX_FRAME_WIDTH: usize = 752;
+// pub const BINNING_FACTOR: usize = 4;
+// pub const FULL_FRAME_ROW_WIDTH: usize = MAX_FRAME_WIDTH/BINNING_FACTOR;
+// pub const FULL_FRAME_COL_HEIGHT: usize = MAX_FRAME_HEIGHT/BINNING_FACTOR;
+
+pub const FLOW_IMG_HEIGHT: usize = 64;
+pub const FLOW_IMG_WIDTH: usize = 64;
+pub const FULL_FRAME_PIXEL_COUNT: usize = FLOW_IMG_HEIGHT*FLOW_IMG_WIDTH;
 pub const FRAME_XFER_WORD_COUNT: u32 = (FULL_FRAME_PIXEL_COUNT / 4) as u32;
 pub type ImageFrameBuf = [u8; FULL_FRAME_PIXEL_COUNT];
 
@@ -35,8 +40,8 @@ impl DcmiWrapper {
 
     pub fn new(dcmi: pac::DCMI, dma2: pac::DMA2) -> Self {
         Self {
-            frame_width: FULL_FRAME_ROW_WIDTH,
-            frame_height: FULL_FRAME_COL_HEIGHT,
+            frame_width: FLOW_IMG_WIDTH,
+            frame_height: FLOW_IMG_HEIGHT,
             dcmi,
             dma2
         }
@@ -65,8 +70,13 @@ impl DcmiWrapper {
 
     /// Configure DMA2 for DCMI peripheral -> memory transfer
     unsafe fn init_dma2(&mut self) {
+
         //configure DMA2, stream 1, channel 1 for DCMI peripheral -> memory
         let mut stream1_chan1 = &self.dma2.st[1];
+
+        #[cfg(feature = "rttdebug")]
+        rprintln!("00 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
+
         //configure double-buffer mode
         stream1_chan1.cr.modify(|_, w| w
             // enable double-buffer mode
@@ -84,7 +94,7 @@ impl DcmiWrapper {
         //const DCMI_PERIPH_ADDR: u32 = DCMI_BASE.wrapping_offset(0x28) as u32;// "0x28 - data register DR"
         const DCMI_PERIPH_ADDR: u32 = 0x5005_0028;
 
-        stream1_chan1.m0ar.write(|w| w.bits(mem0_addr));
+        //stream1_chan1.m0ar.write(|w| w.bits(mem0_addr));
         stream1_chan1.m1ar.write(|w| w.bits(mem1_addr));
         stream1_chan1.par.write(|w| w.bits(DCMI_PERIPH_ADDR));
 
@@ -111,24 +121,45 @@ impl DcmiWrapper {
             // single peripheral burst
             .pburst().single()
         });
+
+        #[cfg(feature = "rttdebug")]
+        rprintln!("00 dma2_fcr: {:#b}", stream1_chan1.fcr.read().bits());
         stream1_chan1.fcr.modify(|_, w| { w
-            // disable fifo mode
-            .dmdis().disabled()
+            // disable direct mode
+            .dmdis().enabled() //TODO verify
             // fifo threshold full
             .fth().full()
         });
+
+        #[cfg(feature = "rttdebug")]
+        rprintln!("00 dma2_ndtr: {:#b}", stream1_chan1.ndtr.read().bits());
         // Set number of items to transfer: number of 32 bit words
         stream1_chan1.ndtr.write(|w| {
             w.bits(FRAME_XFER_WORD_COUNT)
         });
 
+        #[cfg(feature = "rttdebug")]
+        rprintln!("CR = {}, NDTR = {}, PAR = {}, M0AR = {}, M1AR = {}, FCR = {}",
+            stream1_chan1.cr.read().bits(),
+            stream1_chan1.ndtr.read().bits(),
+            stream1_chan1.par.read().bits(),
+            stream1_chan1.m0ar.read().bits(),
+            stream1_chan1.m1ar.read().bits(),
+            stream1_chan1.fcr.read().bits(),
+        );
+
+        //exp CR = 33969408, NDTR = 1024, PAR = 1342505000, M0AR = 0, M1AR = 536905744, FCR = 35}
+        //got CR = 33969408, NDTR = 1024, PAR = 1342505000, M0AR = 536871992, M1AR = 536876088, FCR = 35
     }
 
     /// Configure the DCMI peripheral for continuous capture
     unsafe fn init_dcmi(&mut self)
     {
+        #[cfg(feature = "rttdebug")]
+        rprintln!("04 dcmi_cr: {:#b}",self.dcmi.cr.read().bits());
+
         //basic DCMI configuration
-        self.dcmi.cr.modify(|_, w| { w
+        self.dcmi.cr.modify(|_, w| {w
             .cm()// capture mode: continuous
             .clear_bit()
             .ess()// synchro mode: hardware
@@ -146,7 +177,7 @@ impl DcmiWrapper {
         });
 
         #[cfg(feature = "rttdebug")]
-        rprintln!("dcmi cr: 0x{:x}",self.dcmi.cr.read().bits());
+        rprintln!("05 dcmi_cr: {:#b}", self.dcmi.cr.read().bits());
     }
 
     /// Enable DMA2 and DCMI after setup
@@ -158,6 +189,9 @@ impl DcmiWrapper {
 
     unsafe fn enable_dma2_stream1(&mut self) {
         let mut stream1_chan1 = &self.dma2.st[1];
+        #[cfg(feature = "rttdebug")]
+        rprintln!("08 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
+
         stream1_chan1.cr.modify(|_, w| w
             // enable stream
             .en().enabled()
@@ -166,14 +200,23 @@ impl DcmiWrapper {
             // Half transfer interrupt enable
             .htie().enabled()
         );
+
+        #[cfg(feature = "rttdebug")]
+        rprintln!("09 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
     }
 
     unsafe fn enable_dcmi(&mut self) {
+        #[cfg(feature = "rttdebug")]
+        rprintln!("12 dcmi_cr: {:#b}",self.dcmi.cr.read().bits());
+
         self.dcmi.cr.modify(|_, w| w
             // enable the interface:
             .enable().set_bit()
             // enable capturing:
             .capture().set_bit());
+
+        #[cfg(feature = "rttdebug")]
+        rprintln!("13 dcmi_cr: {:#b}",self.dcmi.cr.read().bits());
     }
 
 
@@ -201,13 +244,20 @@ impl DcmiWrapper {
             }
         });
 
-        self.dma2.st[1].cr.modify(|_, w| w
+        let mut stream1_chan1 = &self.dma2.st[1];
+
+        #[cfg(feature = "rttdebug")]
+        rprintln!("00 dma2_cr int: {:#b}", stream1_chan1.cr.read().bits());
+
+        stream1_chan1.cr.modify(|_, w| w
             // Half transfer interrupt enable
             .htie().enabled()
             // Transfer complete interrupt enable
             .tcie().enabled()
         );
 
+        #[cfg(feature = "rttdebug")]
+        rprintln!("01 dma2_cr int: {:#b}", stream1_chan1.cr.read().bits());
     }
 
     pub fn dcmi_capture_finished(&mut self) -> bool {
