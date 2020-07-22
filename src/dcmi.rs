@@ -17,10 +17,22 @@ use panic_rtt_core::rprintln;
 // pub const FULL_FRAME_ROW_WIDTH: usize = MAX_FRAME_WIDTH/BINNING_FACTOR;
 // pub const FULL_FRAME_COL_HEIGHT: usize = MAX_FRAME_HEIGHT/BINNING_FACTOR;
 
+
+
+//These are mt9v034 constants, not generally applicable to all cameras
+const MAX_FRAME_WIDTH: usize = 752;
+const MAX_FRAME_HEIGHT: usize = 480;
+const BINNING_FACTOR: usize = 4;
+const FULL_FRAME_WIDTH: usize = MAX_FRAME_WIDTH / BINNING_FACTOR; // 188
+const FULL_FRAME_HEIGHT: usize = MAX_FRAME_HEIGHT / BINNING_FACTOR; // 120
+const FULL_FRAME_PIXEL_COUNT: usize = FULL_FRAME_WIDTH * FULL_FRAME_HEIGHT; //22560
+
 pub const FLOW_IMG_HEIGHT: usize = 64;
 pub const FLOW_IMG_WIDTH: usize = 64;
-pub const FULL_FRAME_PIXEL_COUNT: usize = FLOW_IMG_HEIGHT*FLOW_IMG_WIDTH;
-pub const FRAME_XFER_WORD_COUNT: u32 = (FULL_FRAME_PIXEL_COUNT / 4) as u32;
+pub const FLOW_FRAME_PIXEL_COUNT: usize = FLOW_IMG_HEIGHT*FLOW_IMG_WIDTH;
+pub const FRAME_XFER_WORD_COUNT: u32 = (FLOW_FRAME_PIXEL_COUNT / 4) as u32;
+
+/// Buffer to store image data; note this is larger than the actual size read
 pub type ImageFrameBuf = [u8; FULL_FRAME_PIXEL_COUNT];
 
 pub struct DcmiWrapper {
@@ -55,17 +67,58 @@ impl DcmiWrapper {
 
         //NOTE(unsafe) This executes only once during initialization
         unsafe {
+            self.deinit_dma2();
+            self.toggle_dcmi(false);
             self.init_dcmi();
             self.init_dma2();
-            self.enable_dcmi_and_dma();
+        }
+        #[cfg(feature = "rttdebug")]
+        rprintln!("dcmi::setup done");
+    }
 
+    pub fn enable_capture(&mut self) {
+        unsafe {
+            self.enable_dcmi_and_dma();
             #[cfg(feature = "rttdebug")]
             {
                 rprintln!("dcmi cr: 0x{:x}",self.dcmi.cr.read().bits());
             }
         }
-        #[cfg(feature = "rttdebug")]
-        rprintln!("dcmi::setup done");
+
+
+    }
+
+    unsafe fn deinit_dma2(&mut self) {
+        let mut stream1_chan1 = &self.dma2.st[1];
+
+        stream1_chan1.cr.modify(|_, w| w
+            // disable stream
+            .en().disabled()
+        );
+
+        stream1_chan1.cr.write(|w| w.bits(0) );
+        stream1_chan1.ndtr.write(|w| w.bits(0) );
+        stream1_chan1.par.write(|w| w.bits(0) );
+        stream1_chan1.m0ar.write(|w| w.bits(0) );
+        stream1_chan1.m1ar.write(|w| w.bits(0) );
+        //fifo control
+        stream1_chan1.fcr.write(|w| w.bits(0x00000021) ); //TODO verify value
+
+        //clear all interrupt enable flags
+        self.clear_dma2_interrupts();
+
+    }
+
+    /// Clear all pending interrupts from DMA2 stream 1
+    unsafe fn clear_dma2_interrupts(&mut self) {
+        // Setting these bits clears the corresponding TCIFx flag in the DMA_LISR register
+        self.dma2.lifcr.write(|w| w
+            .cfeif1().set_bit()
+            .cdmeif1().set_bit()
+            .cteif1().set_bit()
+            .chtif1().set_bit()
+            .ctcif1().set_bit()
+        );
     }
 
     /// Configure DMA2 for DCMI peripheral -> memory transfer
@@ -139,7 +192,7 @@ impl DcmiWrapper {
         });
 
         #[cfg(feature = "rttdebug")]
-        rprintln!("CR = {}, NDTR = {}, PAR = {}, M0AR = {}, M1AR = {}, FCR = {}",
+        rprintln!("post-init dma2 CR = {}, NDTR = {}, PAR = {}, M0AR = {}, M1AR = {}, FCR = {}",
             stream1_chan1.cr.read().bits(),
             stream1_chan1.ndtr.read().bits(),
             stream1_chan1.par.read().bits(),
@@ -148,8 +201,8 @@ impl DcmiWrapper {
             stream1_chan1.fcr.read().bits(),
         );
 
-        //exp CR = 33969408, NDTR = 1024, PAR = 1342505000, M0AR = 0, M1AR = 536905744, FCR = 35}
-        //got CR = 33969408, NDTR = 1024, PAR = 1342505000, M0AR = 536871992, M1AR = 536876088, FCR = 35
+        //exp CR = 33969408, NDTR = 1024, PAR = 1342505000, M0AR = 0, M1AR = 536905744, FCR = 35
+        //got CR = 33969408, NDTR = 1024, PAR = 1342505000, M0AR = 0, M1AR = 536894552, FCR = 35
     }
 
     /// Configure the DCMI peripheral for continuous capture
@@ -159,7 +212,7 @@ impl DcmiWrapper {
         rprintln!("04 dcmi_cr: {:#b}",self.dcmi.cr.read().bits());
 
         //basic DCMI configuration
-        self.dcmi.cr.modify(|_, w| {w
+        self.dcmi.cr.modify(|_, w| { w
             .cm()// capture mode: continuous
             .clear_bit()
             .ess()// synchro mode: hardware
@@ -183,8 +236,21 @@ impl DcmiWrapper {
     /// Enable DMA2 and DCMI after setup
     unsafe fn enable_dcmi_and_dma(&mut self) {
         self.enable_dma2_stream1();
-        self.enable_dcmi();
+        self.toggle_dcmi(true);
         self.enable_dma_interrupts();
+
+        #[cfg(feature = "rttdebug")]
+            {
+                let mut stream1_chan1 = &self.dma2.st[1];
+                rprintln!("post-enable dma2 CR = {}, NDTR = {}, PAR = {}, M0AR = {}, M1AR = {}, FCR = {}",
+                    stream1_chan1.cr.read().bits(),
+                    stream1_chan1.ndtr.read().bits(),
+                    stream1_chan1.par.read().bits(),
+                    stream1_chan1.m0ar.read().bits(),
+                    stream1_chan1.m1ar.read().bits(),
+                    stream1_chan1.fcr.read().bits(),
+                );
+            }
     }
 
     unsafe fn enable_dma2_stream1(&mut self) {
@@ -195,28 +261,31 @@ impl DcmiWrapper {
         stream1_chan1.cr.modify(|_, w| w
             // enable stream
             .en().enabled()
-            // Transfer complete interrupt enable
-            .tcie().enabled()
-            // Half transfer interrupt enable
-            .htie().enabled()
         );
 
         #[cfg(feature = "rttdebug")]
         rprintln!("09 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
     }
 
-    unsafe fn enable_dcmi(&mut self) {
+    unsafe fn toggle_dcmi(&mut self, enable: bool) {
         #[cfg(feature = "rttdebug")]
-        rprintln!("12 dcmi_cr: {:#b}",self.dcmi.cr.read().bits());
+        rprintln!("toggle dcmi_cr: {:#b}",self.dcmi.cr.read().bits());
 
-        self.dcmi.cr.modify(|_, w| w
+        if enable {
             // enable the interface:
-            .enable().set_bit()
+            self.dcmi.cr.modify(|_, w| w.enable().set_bit());
             // enable capturing:
-            .capture().set_bit());
+            self.dcmi.cr.modify(|_, w| w.capture().set_bit());
+        }
+        else {
+            // disable the interface:
+            self.dcmi.cr.modify(|_, w| w.enable().clear_bit());
+            // disable capturing:
+            self.dcmi.cr.modify(|_, w| w.capture().clear_bit());
+        }
 
         #[cfg(feature = "rttdebug")]
-        rprintln!("13 dcmi_cr: {:#b}",self.dcmi.cr.read().bits());
+        rprintln!("toggle dcmi_cr: {:#b}",self.dcmi.cr.read().bits());
     }
 
 
@@ -247,7 +316,7 @@ impl DcmiWrapper {
         let mut stream1_chan1 = &self.dma2.st[1];
 
         #[cfg(feature = "rttdebug")]
-        rprintln!("00 dma2_cr int: {:#b}", stream1_chan1.cr.read().bits());
+        rprintln!("04 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
 
         stream1_chan1.cr.modify(|_, w| w
             // Half transfer interrupt enable
@@ -257,7 +326,7 @@ impl DcmiWrapper {
         );
 
         #[cfg(feature = "rttdebug")]
-        rprintln!("01 dma2_cr int: {:#b}", stream1_chan1.cr.read().bits());
+        rprintln!("05 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
     }
 
     pub fn dcmi_capture_finished(&mut self) -> bool {

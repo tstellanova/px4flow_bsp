@@ -12,7 +12,6 @@ use cortex_m::singleton;
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
 use crate::dcmi::DcmiWrapper;
-use cortex_m::asm::bkpt;
 
 
 /// The main Board support type:
@@ -112,6 +111,9 @@ impl Board<'_> {
         let mut cam_config =
             Mt9v034::new(i2c2_bus_mgr.acquire(), base_i2c_address);
         cam_config.setup(&mut delay_source).expect("could not configure MT9V034");
+
+        //enable interrupts and so forth after the i2c config
+        dcmi_wrap.enable_capture();
 
         Self {
             external_i2c1: i2c1_bus_mgr,

@@ -50,14 +50,29 @@ fn main() -> ! {
         let _ = led.set_high();
     }
 
-    //for now we turn on a gray test pattern
-    let _ = board.camera_config.as_mut().unwrap().
-        enable_pixel_test_pattern(true, 0x3000);
+    // //for now we turn on a gray test pattern
+    // let _ = board.camera_config.as_mut().unwrap().
+    //     enable_pixel_test_pattern(true, 0x3000);
 
     loop {
         for _ in 0..10 {
             for _ in 0..10 {
                 for _ in 0..10 {
+                    if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
+                        if dcmi_wrap.dcmi_capture_finished() {
+                            rprintln!("cap finished!");
+                        }
+                        if dcmi_wrap.dma_transfer_finished() {
+                            rprintln!("xfer finished!");
+                        }
+                        let ris =  dcmi_wrap.dcmi_raw_status();
+                        if 0 != ris {
+                            rprintln!("cap ris: 0x{:x}",ris);
+                        }
+                    }
+
+                    DcmiWrapper::dump_counts();
+
                     if board.gyro.is_some() {
                         if let Ok(_sample) =  board.gyro.as_mut().unwrap().gyro()
                         {
@@ -72,26 +87,12 @@ fn main() -> ! {
 
                     let _ = board.user_leds[0].toggle(); //amber
                 }
-
             }
 
             let _ = board.user_leds[1].toggle(); //blue
         }
 
-        if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
-            if dcmi_wrap.dcmi_capture_finished() {
-                rprintln!("cap finished!");
-            }
-            if dcmi_wrap.dma_transfer_finished() {
-                rprintln!("xfer finished!");
-            }
-            let ris =  dcmi_wrap.dcmi_raw_status();
-            if 0 != ris {
-                rprintln!("cap ris: 0x{:x}",ris);
-            }
-        }
 
-        DcmiWrapper::dump_counts();
         //DcmiWrapper::dump_imgbuf1();
         let _ = board.user_leds[2].toggle(); //red
     }
