@@ -2,7 +2,7 @@
 # J-LINK GDB SERVER initialization
 #
 # This connects to a GDB Server listening
-# for commands on localhost at tcp port 2dma2_cr int331
+# for commands on localhost at tcp port 2331
 target extended-remote localhost:2331
 
 monitor speed 30
