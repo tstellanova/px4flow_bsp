@@ -19,6 +19,7 @@ use crate::dcmi::DcmiWrapper;
 /// onboard devices as well as bus ports for external ports peripherals.
 pub struct Board<'a> {
     pub user_leds: [LedOutputPin; 3],
+    pub delay_source: DelaySource,
     pub external_i2c1: I2c1BusManager,
     pub camera_config: Option<CameraConfigType<'a>>,
     pub gyro: Option<GyroType>,
@@ -120,6 +121,7 @@ impl Board<'_> {
             camera_config:  Some(cam_config),
             gyro: gyro_opt,
             user_leds: [raw_user_leds.0, raw_user_leds.1, raw_user_leds.2],
+            delay_source,
             eeprom: eeprom_opt,
             dcmi_wrap: Some(dcmi_wrap),
             usart2,

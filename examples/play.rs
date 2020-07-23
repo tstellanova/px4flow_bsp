@@ -19,12 +19,12 @@ use panic_rtt_core::{self, rprintln, rtt_init_print};
 use embedded_hal::digital::v2::OutputPin;
 use embedded_hal::digital::v2::ToggleableOutputPin;
 
-const GYRO_REPORTING_RATE_HZ: u16 = 380;
+const GYRO_REPORTING_RATE_HZ: u16 = 95;
 const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 
 use px4flow_bsp::{board::Board, dcmi};
 use px4flow_bsp::dcmi::DcmiWrapper;
-// use cortex_m::asm::{bkpt};
+use embedded_hal::blocking::delay::{DelayMs};
 
 /// should be called whenever DMA2 completes a transfer
 #[interrupt]
@@ -60,21 +60,19 @@ fn main() -> ! {
     loop {
         for _ in 0..10 {
             for _ in 0..10 {
-                for _ in 0..10 {
-                    // read the 6dof frequently
-                    if let Some(six_dof) = board.gyro.as_mut() {
-                        if let Ok(sample) = six_dof.gyro() {
-                            rprintln!(
-                                "gyro {}, {}, {}",
-                                sample.x,
-                                sample.y,
-                                sample.z
-                            );
-                        }
+                // read the 6dof frequently
+                if let Some(six_dof) = board.gyro.as_mut() {
+                    if let Ok(sample) = six_dof.gyro() {
+                        rprintln!(
+                            "gyro {}, {}, {}",
+                            sample.x,
+                            sample.y,
+                            sample.z
+                        );
                     }
-
-                    let _ = board.user_leds[0].toggle(); //amber
                 }
+                board.delay_source.delay_ms(loop_interval);
+                let _ = board.user_leds[0].toggle(); //amber
             }
             if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
                 dcmi_wrap.dump_status();
