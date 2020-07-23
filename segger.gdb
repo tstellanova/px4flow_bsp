@@ -17,12 +17,20 @@ monitor speed auto
 #set remote memory-write-packet-size 1024
 #set remote memory-write-packet-size fixed
 
+# break DefaultHandler
+break HardFault
+
+#break main
+#break Board::new
+#break DMA2_STREAM1
+#break DCMI
+
 # don't confirm when quitting debugger
 define hook-quit
     set confirm off
 end
 
-monitor semihosting enable
+#monitor semihosting enable
 
 load
 

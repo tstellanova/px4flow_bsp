@@ -10,3 +10,7 @@ pub mod peripherals;
 
 #[allow(unused)]
 pub mod board;
+
+#[allow(unused)]
+pub mod dcmi;
+
