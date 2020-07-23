@@ -192,25 +192,19 @@ pub fn setup_peripherals() -> (
     );
 
 
-
     let dcmi = dp.DCMI;
     let dma2 = dp.DMA2;
 
     //configure PA2, PA3 as EXPOSURE and STANDBY PP output lines 2MHz
-    let mut exposure_line = gpioa
-        .pa2 // TIM5_CH3_EXPOSURE
-        //.into_alternate_af2() // AF2 -> TIM5_CH3
-        .into_push_pull_output()
-        .set_speed(Speed::Low);
-    let mut standby_line = gpioa
-        .pa3 // TIM5_CH4_STANDBY
-        //.into_alternate_af2() // AF2 -> TIM5_CH4
-        .into_push_pull_output()
-        .set_speed(Speed::Low);
+    // TIM5_CH3_EXPOSURE
+    let mut exposure_line = gpioa.pa2.into_push_pull_output().set_speed(Speed::Low);
+    // TIM5_CH4_STANDBY
+    let mut standby_line = gpioa.pa3.into_push_pull_output().set_speed(Speed::Low);
     //clear these lines:
     let _ = exposure_line.set_low();
     let _ = standby_line.set_low();
     //The sensor goes into standby mode by setting STANDBY to HIGH.
+    //TODO export exposure and standby lines available on the Board struct?
 
     //CAM_NRESET / PA5  is unused
 
@@ -250,25 +244,6 @@ pub fn setup_peripherals() -> (
         dcmi
     )
 }
-
-
-// fn calc_irq_priority(preempt_priority: u8, subpriority: u8) -> u32 {
-//     tmppriority: u8 = 0x00;
-//     tmppre: u8 = 0x00;
-//     tmpsub: u8 = 0x0F;
-//
-//     tmppriority = (0x700 - ((SCB->AIRCR) & (uint32_t)0x700))>> 0x08;
-//     tmppre = (0x4 - tmppriority);
-//     tmpsub = tmpsub >> tmppriority;
-//
-//     tmppriority = preempt_priority << tmppre;
-//     tmppriority |=  (uint8_t)(subpriority & tmpsub);
-//
-//     tmppriority = tmppriority << 0x04;
-//
-//     tmppriority
-// }
-
 
 /// I2C1 port used for external communication
 pub type I2c1Port = p_hal::i2c::I2c<
@@ -318,7 +293,8 @@ pub type DcmiControlPin = p_hal::gpio::Alternate<p_hal::gpio::AF13>;
 // pub type DcmiDataInnerPin = p_hal::gpio::Alternate<p_hal::gpio::AF13>;
 pub type DcmiParallelDataPin = DcmiControlPin; //p_hal::gpio::Input<p_hal::gpio::PullUp>;
 
-/// Parallel image data lines for DCMI
+/// Parallel image data lines for DCMI:
+/// for the PX4FLOW, only 10 are connected to the mt9v034 image sensor
 pub type DcmiDataPins = (
     p_hal::gpio::gpioc::PC6<DcmiParallelDataPin>, // D0
     p_hal::gpio::gpioc::PC7<DcmiParallelDataPin>, // D1

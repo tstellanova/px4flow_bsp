@@ -62,20 +62,15 @@ fn main() -> ! {
             for _ in 0..10 {
                 // read the 6dof frequently
                 if let Some(six_dof) = board.gyro.as_mut() {
-                    if let Ok(sample) = six_dof.gyro() {
-                        rprintln!(
-                            "gyro {}, {}, {}",
-                            sample.x,
-                            sample.y,
-                            sample.z
-                        );
+                    if let Ok(_sample) = six_dof.gyro() {
+                        //rprintln!("gyro {}, {}, {}", _sample.x, _sample.y, _sample.z );
                     }
                 }
                 board.delay_source.delay_ms(loop_interval);
                 let _ = board.user_leds[0].toggle(); //amber
             }
             if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
-                dcmi_wrap.dump_status();
+                //dcmi_wrap.dump_status();
             }
             let _ = board.user_leds[1].toggle(); //blue
         }
