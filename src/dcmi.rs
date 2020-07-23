@@ -8,6 +8,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
+use core::ops::Deref;
 
 //TODO make frame constants configurable?
 
@@ -89,12 +90,9 @@ impl DcmiWrapper {
     }
 
     unsafe fn deinit_dma2(&mut self) {
-        let mut stream1_chan1 = &self.dma2.st[1];
 
-        stream1_chan1.cr.modify(|_, w| w
-            // disable stream
-            .en().disabled()
-        );
+        self.toggle_dma2_stream1(false);
+        let mut stream1_chan1 = &self.dma2.st[1];
 
         stream1_chan1.cr.write(|w| w.bits(0) );
         stream1_chan1.ndtr.write(|w| w.bits(0) );
@@ -106,7 +104,6 @@ impl DcmiWrapper {
 
         //clear all interrupt enable flags
         self.clear_dma2_interrupts();
-
     }
 
     /// Clear all pending interrupts from DMA2 stream 1
@@ -141,15 +138,11 @@ impl DcmiWrapper {
         let mem0_addr: u32 = (&IMG_BUF1 as *const ImageFrameBuf) as u32;
         let mem1_addr: u32 = (&IMG_BUF2 as *const ImageFrameBuf) as u32;
 
-        // currently we can't easily coerce pointers to u32 in const context,
-        // but here's how we would calculate the DCMI peripheral address for DMA:
-        //const DCMI_BASE: *const pac::dcmi::RegisterBlock = pac::DCMI::ptr(); //0x5005_0000
-        //const DCMI_PERIPH_ADDR: u32 = DCMI_BASE.wrapping_offset(0x28) as u32;// "0x28 - data register DR"
-        const DCMI_PERIPH_ADDR: u32 = 0x5005_0028;
+
 
         //stream1_chan1.m0ar.write(|w| w.bits(mem0_addr));
         stream1_chan1.m1ar.write(|w| w.bits(mem1_addr));
-        stream1_chan1.par.write(|w| w.bits(DCMI_PERIPH_ADDR));
+        stream1_chan1.par.write(|w| w.bits(Self::DCMI_PERIPH_ADDR));
 
         // init dma2 stream1
         stream1_chan1.cr.modify(|_, w| { w
@@ -235,9 +228,10 @@ impl DcmiWrapper {
 
     /// Enable DMA2 and DCMI after setup
     unsafe fn enable_dcmi_and_dma(&mut self) {
-        self.enable_dma2_stream1();
+        self.toggle_dma2_stream1(true);
         self.toggle_dcmi(true);
         self.enable_dma_interrupts();
+        self.enable_dcmi_interrupts();
 
         #[cfg(feature = "rttdebug")]
             {
@@ -253,15 +247,18 @@ impl DcmiWrapper {
             }
     }
 
-    unsafe fn enable_dma2_stream1(&mut self) {
+
+    unsafe fn toggle_dma2_stream1(&mut self, enable: bool) {
         let mut stream1_chan1 = &self.dma2.st[1];
         #[cfg(feature = "rttdebug")]
         rprintln!("08 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
 
-        stream1_chan1.cr.modify(|_, w| w
-            // enable stream
-            .en().enabled()
-        );
+        if enable {
+            stream1_chan1.cr.modify(|_, w| w.en().enabled());
+        }
+        else {
+            stream1_chan1.cr.modify(|_, w| w.en().disabled());
+        }
 
         #[cfg(feature = "rttdebug")]
         rprintln!("09 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
@@ -288,29 +285,29 @@ impl DcmiWrapper {
         rprintln!("toggle dcmi_cr: {:#b}",self.dcmi.cr.read().bits());
     }
 
+    unsafe fn enable_dcmi_interrupts(&mut self) {
+        cortex_m::interrupt::free(|_| {
+            // enable interrupts DCMI capture completion
+            pac::NVIC::unpend(pac::Interrupt::DCMI);
+            pac::NVIC::unmask(pac::Interrupt::DCMI);
+        });
 
-    // unsafe fn enable_dcmi_interrupts(&mut self) {
-    //     cortex_m::interrupt::free(|_| {
-    //         // enable interrupts DCMI capture completion
-    //         pac::NVIC::unpend(pac::Interrupt::DCMI);
-    //         unsafe {
-    //             pac::NVIC::unmask(pac::Interrupt::DCMI);
-    //         }
-    //     });
-    //
-    //     self.dcmi.ier.modify(|_, w|  w
-    //         // frame capture completion interrupt
-    //         .frame_ie().set_bit()
-    //     );
-    // }
+        self.dcmi.ier.modify(|_, w|  w
+            .err_ie().set_bit()
+            .ovr_ie().set_bit()
+            .vsync_ie().set_bit()
+            // line valid
+            .line_ie().set_bit()
+            // frame capture completion interrupt
+            .frame_ie().set_bit()
+        );
+    }
 
     unsafe fn enable_dma_interrupts(&mut self) {
         cortex_m::interrupt::free(|_| {
             // enable interrupts for DMA2 transfer completion
             pac::NVIC::unpend(pac::Interrupt::DMA2_STREAM1);
-            unsafe {
-                pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1);
-            }
+            pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1);
         });
 
         let mut stream1_chan1 = &self.dma2.st[1];
@@ -329,16 +326,41 @@ impl DcmiWrapper {
         rprintln!("05 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
     }
 
-    pub fn dcmi_capture_finished(&mut self) -> bool {
-        self.dcmi.ris.read().frame_ris().bit_is_set()
+    pub fn dma2_raw_lisr(&mut self) -> u32 {
+        self.dma2.lisr.read().bits()
     }
 
-    pub fn dma_transfer_finished(&mut self) -> bool {
-        self.dma2.lisr.read().tcif1().bit_is_set()
+    pub fn dma2_raw_hisr(&mut self) -> u32 {
+        self.dma2.hisr.read().bits()
     }
 
     pub fn dcmi_raw_status(&mut self) -> u32 {
         self.dcmi.ris.read().bits()
+    }
+
+    pub fn dump_status(&mut self) {
+        let p = Self::DCMI_PERIPH_ADDR as *const u32;
+        let val = unsafe { core::ptr::read(p) };
+        // let val: u32 = unsafe { *(Self::DCMI_PERIPH_ADDR as *const u32) };
+
+        if val != 0 {
+            #[cfg(feature = "rttdebug")]
+            rprintln!("DCMI_DR: {:#b}", val);
+        }
+
+        let dcmi_en = unsafe { &(*pac::RCC::ptr()).ahb2enr.read().dcmien().bit_is_set() } ;
+        if !dcmi_en {
+            #[cfg(feature = "rttdebug")]
+            rprintln!("dcmi_en false?");
+        }
+
+        let dcmi_mis = self.dcmi.mis.read().bits();
+        if 0 != dcmi_mis {
+            #[cfg(feature = "rttdebug")]
+            rprintln!("dcmi_mis {:#b}", dcmi_mis);
+        }
+
+
     }
 
     /// Dump count of captures and dma transfers to rtt
@@ -359,6 +381,12 @@ impl DcmiWrapper {
             rprintln!("imgbuf1 {:x?}",&IMG_BUF1[0..4]);
         }
     }
+
+    // currently we can't easily coerce pointers to u32 in const context,
+    // but here's how we would calculate the DCMI peripheral address for DMA:
+    //const DCMI_BASE: *const pac::dcmi::RegisterBlock = pac::DCMI::ptr(); //0x5005_0000
+    //const DCMI_PERIPH_ADDR: u32 = DCMI_BASE.wrapping_offset(0x28) as u32;// "0x28 - data register DR"
+    const DCMI_PERIPH_ADDR: u32 = 0x5005_0028;
 }
 
 pub static DCMI_DMA_IT_COUNT: AtomicUsize = AtomicUsize::new(0);

@@ -23,6 +23,7 @@ break HardFault
 #break main
 #break Board::new
 break DMA2_STREAM1
+break DCMI
 
 # don't confirm when quitting debugger
 define hook-quit

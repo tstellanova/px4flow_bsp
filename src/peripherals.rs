@@ -58,6 +58,16 @@ pub fn setup_peripherals() -> (
 
     let mut delay_source = p_hal::delay::Delay::new(cp.SYST, clocks);
 
+    //enable DCMI and DMA clocks before configuring their pins
+    unsafe {
+        // enable peripheral clocks for DCMI and DMA2
+        &(*pac::RCC::ptr()).ahb2enr
+            .modify(|_, w| w.dcmien().enabled());
+        &(*pac::RCC::ptr()).ahb1enr
+            .modify(|_, w| w.dma2en().enabled());
+        //TODO RCC_AHB2PeriphClockCmd(RCC_AHB2Periph_DCMI, ENABLE);
+    }
+
     // let hclk = clocks.hclk();
     // let pll48clk = clocks.pll48clk().unwrap_or(0u32.hz());
     // let pclk1 = clocks.pclk1();
@@ -66,7 +76,7 @@ pub fn setup_peripherals() -> (
     let gpioa = dp.GPIOA.split();
     let gpiob = dp.GPIOB.split();
     let gpioc = dp.GPIOC.split();
-    let mut gpiod = dp.GPIOD.split();
+    let gpiod = dp.GPIOD.split();
     let gpioe = dp.GPIOE.split();
 
     let user_led0 = gpioe.pe2.into_push_pull_output().downgrade(); //amber
@@ -142,8 +152,6 @@ pub fn setup_peripherals() -> (
     let _ = spi_cs_gyro.set_high();
 
 
-    // RCC_AHB2PeriphClockCmd(RCC_AHB2Periph_DCMI, ENABLE);
-
     // DCMI control pins
     let dcmi_ctrl_pins = {
         let pixck = gpioa
@@ -183,16 +191,7 @@ pub fn setup_peripherals() -> (
         gpioc.pc12.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(), // DCMI_D9
     );
 
-    unsafe {
-        // enable peripheral clocks for DCMI and DMA2
-        &(*pac::RCC::ptr()).ahb2enr
-            .modify(|_, w| w.dcmien().enabled());
-        &(*pac::RCC::ptr()).ahb1enr
-            .modify(|_, w| w.dma2en().enabled());
 
-        //TODO ? preset priorities for DCMI-DMA2 related interrupts
-        //cp.NVIC.set_priority(pac::Interrupt::DMA2_STREAM1, 5);
-    }
 
     let dcmi = dp.DCMI;
     let dma2 = dp.DMA2;

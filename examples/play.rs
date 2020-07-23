@@ -24,15 +24,18 @@ const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 
 use px4flow_bsp::{board::Board, dcmi};
 use px4flow_bsp::dcmi::DcmiWrapper;
+use cortex_m::asm::{wfi, wfe, bkpt};
 
 #[interrupt]
 fn DMA2_STREAM1() {
     dcmi::dma2_stream1_irqhandler();
+    bkpt();
 }
 
 #[interrupt]
 fn DCMI() {
     dcmi::dcmi_irqhandler();
+    bkpt();
 }
 
 
@@ -50,7 +53,7 @@ fn main() -> ! {
         let _ = led.set_high();
     }
 
-    // //for now we turn on a gray test pattern
+    //for now we turn on a gray test pattern
     // let _ = board.camera_config.as_mut().unwrap().
     //     enable_pixel_test_pattern(true, 0x3000);
 
@@ -59,19 +62,26 @@ fn main() -> ! {
             for _ in 0..10 {
                 for _ in 0..10 {
                     if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
-                        if dcmi_wrap.dcmi_capture_finished() {
-                            rprintln!("cap finished!");
-                        }
-                        if dcmi_wrap.dma_transfer_finished() {
-                            rprintln!("xfer finished!");
-                        }
+
                         let ris =  dcmi_wrap.dcmi_raw_status();
                         if 0 != ris {
-                            rprintln!("cap ris: 0x{:x}",ris);
+                            rprintln!("cap ris: {:#b}",ris);
                         }
+
+                        let lisr = dcmi_wrap.dma2_raw_lisr();
+                        if 0 != lisr {
+                            rprintln!("lisr: {:#b}",lisr);
+                        }
+
+                        let hisr = dcmi_wrap.dma2_raw_hisr();
+                        if 0 != hisr {
+                            rprintln!("hisr: {:#b}",hisr);
+                        }
+
+                        dcmi_wrap.dump_status();
                     }
 
-                    DcmiWrapper::dump_counts();
+                    //DcmiWrapper::dump_counts();
 
                     if board.gyro.is_some() {
                         if let Ok(_sample) =  board.gyro.as_mut().unwrap().gyro()
@@ -91,7 +101,6 @@ fn main() -> ! {
 
             let _ = board.user_leds[1].toggle(); //blue
         }
-
 
         //DcmiWrapper::dump_imgbuf1();
         let _ = board.user_leds[2].toggle(); //red

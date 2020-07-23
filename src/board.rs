@@ -117,7 +117,7 @@ impl Board<'_> {
 
         Self {
             external_i2c1: i2c1_bus_mgr,
-            camera_config: Some(cam_config),
+            camera_config:  Some(cam_config),
             gyro: gyro_opt,
             user_leds: [raw_user_leds.0, raw_user_leds.1, raw_user_leds.2],
             eeprom: eeprom_opt,
