@@ -24,20 +24,18 @@ const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 
 use px4flow_bsp::{board::Board, dcmi};
 use px4flow_bsp::dcmi::DcmiWrapper;
-use cortex_m::asm::{bkpt};
+// use cortex_m::asm::{bkpt};
 
 /// should be called whenever DMA2 completes a transfer
 #[interrupt]
 fn DMA2_STREAM1() {
     dcmi::dma2_stream1_irqhandler();
-    bkpt();
 }
 
 /// should be called whenever DCMI completes a frame
 #[interrupt]
 fn DCMI() {
     dcmi::dcmi_irqhandler();
-    bkpt();
 }
 
 
@@ -63,47 +61,28 @@ fn main() -> ! {
         for _ in 0..10 {
             for _ in 0..10 {
                 for _ in 0..10 {
-                    if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
-
-                        let ris =  dcmi_wrap.dcmi_raw_status();
-                        if 0 != ris {
-                            rprintln!("cap ris: {:#b}",ris);
-                        }
-
-                        let lisr = dcmi_wrap.dma2_raw_lisr();
-                        if 0 != lisr {
-                            rprintln!("lisr: {:#b}",lisr);
-                        }
-
-                        let hisr = dcmi_wrap.dma2_raw_hisr();
-                        if 0 != hisr {
-                            rprintln!("hisr: {:#b}",hisr);
-                        }
-
-                        dcmi_wrap.dump_status();
-                    }
-
-                    //DcmiWrapper::dump_counts();
-
-                    if board.gyro.is_some() {
-                        if let Ok(_sample) =  board.gyro.as_mut().unwrap().gyro()
-                        {
-                            // rprintln!(
-                            //     "gyro {}, {}, {}",
-                            //     sample.x,
-                            //     sample.y,
-                            //     sample.z
-                            // );
+                    // read the 6dof frequently
+                    if let Some(six_dof) = board.gyro.as_mut() {
+                        if let Ok(sample) = six_dof.gyro() {
+                            rprintln!(
+                                "gyro {}, {}, {}",
+                                sample.x,
+                                sample.y,
+                                sample.z
+                            );
                         }
                     }
 
                     let _ = board.user_leds[0].toggle(); //amber
                 }
             }
-
+            if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
+                dcmi_wrap.dump_status();
+            }
             let _ = board.user_leds[1].toggle(); //blue
         }
 
+        DcmiWrapper::dump_counts();
         //DcmiWrapper::dump_imgbuf1();
         let _ = board.user_leds[2].toggle(); //red
     }

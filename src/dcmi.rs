@@ -292,12 +292,9 @@ impl DcmiWrapper {
             pac::NVIC::unmask(pac::Interrupt::DCMI);
         });
 
-        self.dcmi.ier.modify(|_, w|  w
-            .err_ie().set_bit()
+        self.dcmi.ier.write(|w|  w
+            // watch for data buffer overrun occurred
             .ovr_ie().set_bit()
-            .vsync_ie().set_bit()
-            // line valid
-            .line_ie().set_bit()
             // frame capture completion interrupt
             .frame_ie().set_bit()
         );
@@ -326,52 +323,33 @@ impl DcmiWrapper {
         rprintln!("05 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
     }
 
-    pub fn dma2_raw_lisr(&mut self) -> u32 {
-        self.dma2.lisr.read().bits()
-    }
-
-    pub fn dma2_raw_hisr(&mut self) -> u32 {
-        self.dma2.hisr.read().bits()
-    }
-
-    pub fn dcmi_raw_status(&mut self) -> u32 {
-        self.dcmi.ris.read().bits()
-    }
-
+    #[cfg(feature = "rttdebug")]
     pub fn dump_status(&mut self) {
-        let p = Self::DCMI_PERIPH_ADDR as *const u32;
-        let val = unsafe { core::ptr::read(p) };
-        // let val: u32 = unsafe { *(Self::DCMI_PERIPH_ADDR as *const u32) };
+        static LAST_FRAME_COUNT:AtomicUsize = AtomicUsize::new(0);
+        let cur_frame_count = DCMI_CAP_COUNT.load(Ordering::Relaxed);
+        let diff = cur_frame_count - LAST_FRAME_COUNT.load(Ordering::Relaxed);
+        LAST_FRAME_COUNT.store(cur_frame_count, Ordering::Relaxed);
 
-        if val != 0 {
-            #[cfg(feature = "rttdebug")]
-            rprintln!("DCMI_DR: {:#b}", val);
+        if diff > 0 {
+            rprintln!("DCMI frames captured: {}", diff);
         }
 
-        let dcmi_en = unsafe { &(*pac::RCC::ptr()).ahb2enr.read().dcmien().bit_is_set() } ;
-        if !dcmi_en {
-            #[cfg(feature = "rttdebug")]
-            rprintln!("dcmi_en false?");
-        }
-
-        let dcmi_mis = self.dcmi.mis.read().bits();
-        if 0 != dcmi_mis {
-            #[cfg(feature = "rttdebug")]
-            rprintln!("dcmi_mis {:#b}", dcmi_mis);
-        }
-
+        // let dcmi_dr = Self::DCMI_PERIPH_ADDR as *const u32;
+        // let dcmi_dr_val = unsafe { core::ptr::read(dcmi_dr) };
+        // if dcmi_dr_val != 0 {
+        //     #[cfg(feature = "rttdebug")]
+        //     rprintln!("DCMI_DR: {:#b}", dcmi_dr_val);
+        // }
 
     }
 
     /// Dump count of captures and dma transfers to rtt
+    #[cfg(feature = "rttdebug")]
     pub fn dump_counts() {
-        #[cfg(feature = "rttdebug")]
-        {
-            let cap_count = DCMI_CAP_COUNT.load(Ordering::Relaxed);
-            let xfer_count = DCMI_DMA_IT_COUNT.load(Ordering::Relaxed);
-            if xfer_count > 0 || cap_count > 0 {
-                rprintln!("caps: {} xfers: {}", cap_count, xfer_count);
-            }
+        let cap_count = DCMI_CAP_COUNT.load(Ordering::Relaxed);
+        let xfer_count = DCMI_DMA_IT_COUNT.load(Ordering::Relaxed);
+        if xfer_count > 0 || cap_count > 0 {
+            rprintln!("caps: {} xfers: {}", cap_count, xfer_count);
         }
     }
 
@@ -397,16 +375,16 @@ pub fn dma2_stream1_irqhandler()
     // dma2 transfer from DCMI to memory completed
     DCMI_DMA_IT_COUNT.fetch_add(1, Ordering::Relaxed);
 
-    unsafe {
-        //clear any interrupt pending bits
-        // Writing 1 to this bit clears the corresponding TCIFx flag in the DMA_LISR register
-        &(*pac::DMA2::ptr()).lifcr.write(|w| w
-            .ctcif1().set_bit()
-            .chtif1().set_bit()
-        );
+    let dma2 = unsafe { &(*pac::DMA2::ptr()) };
 
-        //TODO process frame data somehow? move to next buffer ?
-    }
+    //clear any interrupt pending bits
+    // Writing 1 to this bit clears the corresponding TCIFx flag in the DMA_LISR register
+    dma2.lifcr.write(|w| w
+        .ctcif1().set_bit()
+        .chtif1().set_bit()
+    );
+
+    //TODO process frame data somehow? move to next buffer ?
 
 }
 
@@ -417,14 +395,25 @@ pub fn dcmi_irqhandler()
 {
     DCMI_CAP_COUNT.fetch_add(1, Ordering::Relaxed);
 
-    unsafe {
-        &(*pac::DCMI::ptr()).icr.write(|w| {
-            //clear dcmi capture complete interrupt flag
-            w.frame_isc().set_bit()
-        });
+    let dcmi = unsafe { &(*pac::DCMI::ptr()) };
+    #[cfg(feature = "rttdebug")]
+    {
+        let ris_val = dcmi.ris.read().bits();
+        // ordinarily we expect this interrupt on frame capture completion
+        if 0b11001 != ris_val {
+            rprintln!("dcmi ris: {:#b}",dcmi.ris.read().bits());
+        }
     }
 
+    dcmi.icr.write(|w| { w
+        //clear dcmi capture complete interrupt flag
+        .frame_isc().set_bit()
+        // clear overflow flag
+        .ovr_isc().set_bit()
+    });
 }
+
+
 
 
 

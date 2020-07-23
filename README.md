@@ -2,21 +2,55 @@
 
 Rust no_std embedded hal board support package for the PX4FLOW optical flow sensor hardware.
 
+## Usage
+
+See the [example](./examples/play.rs) to an example that has been tested with
+the PX4FLOW hardware. 
+
+### Interrupt Handling
+
+Currently you need to configure your application to forward interrupts from app-level
+interrupt handlers, ie:
+
+```rust
+/// should be called whenever DMA2 completes a transfer
+#[interrupt]
+fn DMA2_STREAM1() {
+    dcmi::dma2_stream1_irqhandler();
+}
+
+/// should be called whenever DCMI completes a frame
+#[interrupt]
+fn DCMI() {
+    dcmi::dcmi_irqhandler();
+}
+```
+
+This assumes you are using the [cortex-m-rt crate](https://crates.io/crates/cortex-m-rt) 
+to construct your embedded application, and using its `#[interrupt]` to handle interrupts.
+
+
 ## Status
 
 Work in progress
 
-- [x] Does not overwrite default PX4FLOW bootloader 
-- [x] Simple blinky example 
-- [x] Support for spi2 (gyro)
+- [x] Does not overwrite the default PX4FLOW bootloader that typically ships with the board
+- [x] Example that sets up DCMI to read from the camera 
+- [x] Support for spi2 (l3gd20 gyro)
 - [x] Support for i2c1 (offboard i2c communication)
-- [x] Support for i2c2 (MT9V034 configuration port)
-- [ ] Support for UART serial comms
-- [ ] Support for DMA with DMCI camera interface (waiting on stm32f4xx-hal support)
+- [x] Support for i2c2 (MT9V034 configuration port, and eeprom)
+- [x] Support for USART2, USART3, and UART4 (sonar)
+- [x] Support for serial eeprom on i2c2
+- [x] Initial setup of DCMI peripheral
+- [x] Initial setup of DMA2 
+- [ ] Fully working DCMI->DMA2-> image buffer pipeline
 
 ## Notes
 - The only supported mode for debugging is RTT with the `rttdebug` feature. This is because 
 the PX4FLOW v2.3 only makes the SWD interface available (no easy ITM solution).
+- The `breakout` feature is intended for library development and debugging purposes.
+Currently it's setup to work with the "DevEBox STM32F4XX_M Ver:3.0" board, which does not
+include a l3gd20 gyro or eeprom, and eg the Arducam MT9V034 breakout board ("UC-396 RevA")
 - This has been tested with the CUAV PX4FLOW v2.3. On this particular board, the 
 SWD and SWCLK pads noted on the bottom of the board appear to be swapped
 
@@ -24,8 +58,8 @@ SWD and SWCLK pads noted on the bottom of the board appear to be swapped
 
 | Pin      | Configuration |
 | :--- | :--- | 
-| PA0      |  UART4_TX ("TIM5_CH1" - no connection)       |
-| PA1      | "TIM5_CH2" (unused)        |
+| PA0      |  UART4_TX ("TIM5_CH1" - N/C)       |
+| PA1      | "TIM5_CH2" (unused - N/C)        |
 | PA2      | TIM5_CH3_EXPOSURE (pulled low)   |
 | PA3      | TIM5_CH4_STANDBY  (pulled low) |
 | PA4      | DCMI_HSYNC       |
