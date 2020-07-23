@@ -59,14 +59,12 @@ pub fn setup_peripherals() -> (
     let mut delay_source = p_hal::delay::Delay::new(cp.SYST, clocks);
 
     //enable DCMI and DMA clocks before configuring their pins
-    unsafe {
-        // enable peripheral clocks for DCMI and DMA2
-        &(*pac::RCC::ptr()).ahb2enr
-            .modify(|_, w| w.dcmien().enabled());
-        &(*pac::RCC::ptr()).ahb1enr
-            .modify(|_, w| w.dma2en().enabled());
-        //TODO RCC_AHB2PeriphClockCmd(RCC_AHB2Periph_DCMI, ENABLE);
-    }
+    let rcc2 = unsafe { &(*RCC::ptr()) };
+    // enable peripheral clocks for DCMI and DMA2
+    rcc2.ahb2enr
+        .modify(|_, w| w.dcmien().set_bit());
+    rcc2.ahb1enr
+        .modify(|_, w| w.dma2en().set_bit());
 
     // let hclk = clocks.hclk();
     // let pll48clk = clocks.pll48clk().unwrap_or(0u32.hz());
@@ -151,44 +149,46 @@ pub fn setup_peripherals() -> (
     let mut spi_cs_gyro = gpiob.pb12.into_push_pull_output();
     let _ = spi_cs_gyro.set_high();
 
-
     // DCMI control pins
     let dcmi_ctrl_pins = {
         let pixck = gpioa
             .pa6 // DCMI_PIXCK
+            .into_pull_up_input()
             .into_alternate_af13()
-            .set_speed(Speed::VeryHigh) // 100 MHz Pullup
-            .into_pull_up_input();
+            .internal_pull_up(true)
+            .set_speed(Speed::VeryHigh); //s/b 100 MHz Pullup
 
         let hsync = gpioa
             .pa4 // DCMI_HSYNC
+            .into_pull_up_input()
             .into_alternate_af13()
-            .set_speed(Speed::VeryHigh) // s/b 100 MHz Pullup
-            .into_pull_up_input();
+            .internal_pull_up(true)
+            .set_speed(Speed::VeryHigh); // s/b 100 MHz Pullup
 
         let vsync = gpiob
             .pb7 // DCMI_VSYNC
+            .into_pull_up_input()
             .into_alternate_af13()
-            .set_speed(Speed::VeryHigh) //s/b 100 MHz Pullup
-            .into_pull_up_input();
+            .internal_pull_up(true)
+            .set_speed(Speed::VeryHigh); //s/b 100 MHz Pullup
 
-        (pixck, hsync, vsync)
+            (pixck, hsync, vsync)
     };
 
 
     // DCMI digital camera interface pins (AF13)
     // this board supports ten parallel lines D0-D9
     let dcmi_data_pins = (
-        gpioc.pc6.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(),  // DCMI_D0
-        gpioc.pc7.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(),  // DCMI_D1
-        gpioe.pe0.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(),  // DCMI_D2
-        gpioe.pe1.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(),  // DCMI_D3
-        gpioe.pe4.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(),  // DCMI_D4
-        gpiob.pb6.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(),  // DCMI_D5
-        gpioe.pe5.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(),  // DCMI_D6
-        gpioe.pe6.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(),  // DCMI_D7
-        gpioc.pc10.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(), // DCMI_D8
-        gpioc.pc12.into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh).into_pull_up_input(), // DCMI_D9
+        gpioc.pc6.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D0
+        gpioc.pc7.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D1
+        gpioe.pe0.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D2
+        gpioe.pe1.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D3
+        gpioe.pe4.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D4
+        gpiob.pb6.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D5
+        gpioe.pe5.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D6
+        gpioe.pe6.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D7
+        gpioc.pc10.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh), // DCMI_D8
+        gpioc.pc12.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh), // DCMI_D9
     );
 
 
@@ -313,10 +313,10 @@ pub type DcmiCtrlPins = (
     p_hal::gpio::gpioa::PA4<DcmiControlPin>, //DCMI_HSYNC
     p_hal::gpio::gpiob::PB7<DcmiControlPin>, //DCMI_VSYNC
 );
-pub type DcmiControlPin = p_hal::gpio::Input<p_hal::gpio::PullUp>;
+pub type DcmiControlPin = p_hal::gpio::Alternate<p_hal::gpio::AF13>;
 
 // pub type DcmiDataInnerPin = p_hal::gpio::Alternate<p_hal::gpio::AF13>;
-pub type DcmiParallelDataPin = p_hal::gpio::Input<p_hal::gpio::PullUp>;
+pub type DcmiParallelDataPin = DcmiControlPin; //p_hal::gpio::Input<p_hal::gpio::PullUp>;
 
 /// Parallel image data lines for DCMI
 pub type DcmiDataPins = (

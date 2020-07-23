@@ -24,14 +24,16 @@ const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 
 use px4flow_bsp::{board::Board, dcmi};
 use px4flow_bsp::dcmi::DcmiWrapper;
-use cortex_m::asm::{wfi, wfe, bkpt};
+use cortex_m::asm::{bkpt};
 
+/// should be called whenever DMA2 completes a transfer
 #[interrupt]
 fn DMA2_STREAM1() {
     dcmi::dma2_stream1_irqhandler();
     bkpt();
 }
 
+/// should be called whenever DCMI completes a frame
 #[interrupt]
 fn DCMI() {
     dcmi::dcmi_irqhandler();
