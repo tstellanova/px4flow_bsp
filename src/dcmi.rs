@@ -25,8 +25,9 @@ pub const FLOW_IMG_WIDTH: usize = 64;
 pub const FLOW_FRAME_PIXEL_COUNT: usize = FLOW_IMG_HEIGHT*FLOW_IMG_WIDTH;
 pub const FRAME_XFER_WORD_COUNT: u32 = (FLOW_FRAME_PIXEL_COUNT / 4) as u32;
 
+pub const IMG_FRAME_BUF_LEN: usize = FULL_FRAME_PIXEL_COUNT;
 /// Buffer to store image data; note this is larger than the actual size read
-pub type ImageFrameBuf = [u8; FULL_FRAME_PIXEL_COUNT];
+pub type ImageFrameBuf = [u8; IMG_FRAME_BUF_LEN];
 
 pub struct DcmiWrapper {
     frame_width: usize,
@@ -405,34 +406,36 @@ fn init_dma_buffers(stream1_chan1: &pac::dma2::ST) {
 /// This is essential to operating DMA in double buffering mode.
 fn swap_idle_and_unused_buf(stream1_chan1: &pac::dma2::ST) {
     // is DMA2 currently writing to memory0 ?
-    let targ_is_mem0 = stream1_chan1.cr.read().ct().is_memory0();
+    // let targ_is_mem0 = stream1_chan1.cr.read().ct().is_memory0();
+    // #[cfg(feature = "rttdebug")]
+    // rprintln!("targ_is_mem0: {} ",targ_is_mem0);
 
-    let cur_unused = UNUSED_BUF_IDX.load(Ordering::Acquire);
-    let new_target = match cur_unused {
-        0 => (&unsafe { IMG_BUF0 } as *const ImageFrameBuf) as u32,
-        1 => (&unsafe { IMG_BUF1 } as *const ImageFrameBuf) as u32,
-        2 => (&unsafe { IMG_BUF2 } as *const ImageFrameBuf) as u32,
-        _ => panic!("invalid cur_unused")
-    };
-
-    if targ_is_mem0 {
-        let cur_mem1 = MEM1_BUF_IDX.load(Ordering::SeqCst);
-        #[cfg(feature = "rttdebug")]
-        rprintln!("mem1 idle: {} unused: {} ", cur_mem1, cur_unused);
-        //memory1 is idle, so swap an unused buffer into DMA_S2M1AR
-        UNUSED_BUF_IDX.store(cur_mem1, Ordering::SeqCst);
-        MEM1_BUF_IDX.store(cur_unused, Ordering::SeqCst);
-        stream1_chan1.m1ar.write(|w| unsafe { w.bits(new_target) } );
-    }
-    else {
-        let cur_mem0 = MEM0_BUF_IDX.load(Ordering::SeqCst);
-        #[cfg(feature = "rttdebug")]
-        rprintln!("mem0 idle: {} unused: {} ", cur_mem0, cur_unused);
-        //memory0 is idle, so swap an unused buffer into DMA_S2M0AR
-        UNUSED_BUF_IDX.store(cur_mem0, Ordering::SeqCst);
-        MEM0_BUF_IDX.store(cur_unused, Ordering::SeqCst);
-        stream1_chan1.m0ar.write(|w| unsafe { w.bits(new_target) });
-    }
+    // let cur_unused = UNUSED_BUF_IDX.load(Ordering::Acquire);
+    // let new_target = match cur_unused {
+    //     0 => (&unsafe { IMG_BUF0 } as *const ImageFrameBuf) as u32,
+    //     1 => (&unsafe { IMG_BUF1 } as *const ImageFrameBuf) as u32,
+    //     2 => (&unsafe { IMG_BUF2 } as *const ImageFrameBuf) as u32,
+    //     _ => panic!("invalid cur_unused")
+    // };
+    //
+    // if targ_is_mem0 {
+    //     let cur_mem1 = MEM1_BUF_IDX.load(Ordering::SeqCst);
+    //     #[cfg(feature = "rttdebug")]
+    //     rprintln!("mem1 idle: {} unused: {} ", cur_mem1, cur_unused);
+    //     //memory1 is idle, so swap an unused buffer into DMA_S2M1AR
+    //     UNUSED_BUF_IDX.store(cur_mem1, Ordering::SeqCst);
+    //     MEM1_BUF_IDX.store(cur_unused, Ordering::SeqCst);
+    //     stream1_chan1.m1ar.write(|w| unsafe { w.bits(new_target) } );
+    // }
+    // else {
+    //     let cur_mem0 = MEM0_BUF_IDX.load(Ordering::SeqCst);
+    //     #[cfg(feature = "rttdebug")]
+    //     rprintln!("mem0 idle: {} unused: {} ", cur_mem0, cur_unused);
+    //     //memory0 is idle, so swap an unused buffer into DMA_S2M0AR
+    //     UNUSED_BUF_IDX.store(cur_mem0, Ordering::SeqCst);
+    //     MEM0_BUF_IDX.store(cur_unused, Ordering::SeqCst);
+    //     stream1_chan1.m0ar.write(|w| unsafe { w.bits(new_target) });
+    // }
 }
 
 

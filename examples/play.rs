@@ -23,8 +23,9 @@ const GYRO_REPORTING_RATE_HZ: u16 = 95;
 const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 
 use px4flow_bsp::{board::Board, dcmi};
-use px4flow_bsp::dcmi::DcmiWrapper;
+use px4flow_bsp::dcmi::{DcmiWrapper, ImageFrameBuf, IMG_FRAME_BUF_LEN};
 use embedded_hal::blocking::delay::{DelayMs};
+use core::mem::MaybeUninit;
 
 /// should be called whenever DMA2 completes a transfer
 #[interrupt]
@@ -39,10 +40,23 @@ fn DCMI() {
 }
 
 
+#[link_section = ".ccmram.IMG_BUFS"]
+static mut FAST_IMG0:ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
+#[link_section = ".ccmram.IMG_BUFS"]
+static mut FAST_IMG1:ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
+
+
 #[entry]
 fn main() -> ! {
     rtt_init_print!(NoBlockTrim);
     rprintln!("-- > MAIN --");
+
+    // unsafe { FAST_IMG0.as_mut_ptr().write([0; IMG_FRAME_BUF_LEN]); }
+    // unsafe { FAST_IMG1.as_mut_ptr().write([0; IMG_FRAME_BUF_LEN]); }
+
+    let img0 = unsafe { FAST_IMG0.as_ptr()} as u32;
+    let img1 = unsafe { FAST_IMG1.as_ptr()} as u32;
+    rprintln!("FAST_IMG0: 0x{:x}\nFAST_IMG1: 0x{:x}", img0, img1);
 
     let mut board = Board::new();
 
@@ -69,8 +83,8 @@ fn main() -> ! {
                 board.delay_source.delay_ms(loop_interval);
                 let _ = board.user_leds[0].toggle(); //amber
             }
-            if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
-                //dcmi_wrap.dump_status();
+            if let Some(_dcmi_wrap) = board.dcmi_wrap.as_mut() {
+                //_dcmi_wrap.dump_status();
             }
             let _ = board.user_leds[1].toggle(); //blue
         }

@@ -33,8 +33,6 @@ stm32f4xx-hal = {version="0.8.3",  features = ["stm32f407", "rt"] }
 l3gd20 = "0.2.0"
 # Camera / imaging sensor
 mt9v034-i2c = {path="../mt9v034-i2c", features=["rttdebug"], version="0.1.2"}
-#mt9v034-i2c = { git="https://github.com/tstellanova/mt9v034-i2c", branch="trunk", features=["rttdebug"], version="0.1.0"}
-#mt9v034-i2c = "0.1.0"
 # Serial EEPROM
 eeprom24x = "0.3.0"
 
