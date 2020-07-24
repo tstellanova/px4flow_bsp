@@ -25,7 +25,6 @@ const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 use px4flow_bsp::{board::Board, dcmi};
 use px4flow_bsp::dcmi::{DcmiWrapper, ImageFrameBuf, IMG_FRAME_BUF_LEN};
 use embedded_hal::blocking::delay::{DelayMs};
-use core::mem::MaybeUninit;
 
 /// should be called whenever DMA2 completes a transfer
 #[interrupt]
