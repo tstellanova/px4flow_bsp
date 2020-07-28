@@ -3,7 +3,7 @@ use stm32f4xx_hal as p_hal;
 
 use pac::{DCMI, RCC};
 
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicUsize, Ordering, AtomicPtr};
 
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
@@ -45,6 +45,9 @@ static BUF0_ADDR: AtomicUsize = AtomicUsize::new(0);
 static BUF1_ADDR: AtomicUsize = AtomicUsize::new(0);
 static BUF2_ADDR: AtomicUsize = AtomicUsize::new(0);
 
+static mut BUF0_PTR:  *const ImageFrameBuf = core::ptr::null();
+static mut BUF1_PTR:  *const ImageFrameBuf = core::ptr::null();
+static mut BUF2_PTR:  *const ImageFrameBuf = core::ptr::null();
 
 /// the buffer index of the frame buffer that is currently unused by DMA
 static UNUSED_BUF_IDX: AtomicUsize = AtomicUsize::new(2);
@@ -320,6 +323,24 @@ impl DcmiWrapper {
         rprintln!("05 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
     }
 
+    /// copy data from the currently buffer into the provided slice
+    pub fn copy_image_buf(&mut self, dest: &mut [u8]) {
+        let cur_unused = UNUSED_BUF_IDX.load(Ordering::SeqCst);
+
+        let raw_source = unsafe {
+            match cur_unused {
+                0 =>  BUF0_PTR,
+                1 =>  BUF1_PTR,
+                2 =>  BUF2_PTR,
+                _ => panic!("invalid cur_unused")
+            }
+        };
+
+        let source = unsafe { raw_source.as_ref().unwrap() };
+        dest.copy_from_slice(source);
+
+    }
+
     #[cfg(feature = "rttdebug")]
     pub fn dump_status(&mut self) {
         static LAST_FRAME_COUNT:AtomicUsize = AtomicUsize::new(0);
@@ -337,7 +358,15 @@ impl DcmiWrapper {
         //     #[cfg(feature = "rttdebug")]
         //     rprintln!("DCMI_DR: {:#b}", dcmi_dr_val);
         // }
+    }
 
+    pub fn available_frame_count(&mut self) -> usize {
+        static LAST_FRAME_COUNT:AtomicUsize = AtomicUsize::new(0);
+        let cur_frame_count = DCMI_CAP_COUNT.load(Ordering::Relaxed);
+        let diff = cur_frame_count - LAST_FRAME_COUNT.load(Ordering::Relaxed);
+        LAST_FRAME_COUNT.store(cur_frame_count, Ordering::Relaxed);
+
+        diff
     }
 
     /// Dump count of captures and dma transfers to rtt
@@ -381,7 +410,7 @@ pub fn dma2_stream1_irqhandler()
         .chtif1().set_bit()
     );
 
-    let stream1_chan1 = &dma2.st[1];
+    // let stream1_chan1 = &dma2.st[1];
     swap_idle_and_unused_buf(stream1_chan1);
 }
 
@@ -392,14 +421,19 @@ fn init_dma_buffers(stream1_chan1: &pac::dma2::ST) {
     MEM1_BUF_IDX.store(1, Ordering::SeqCst);
     UNUSED_BUF_IDX.store(2, Ordering::SeqCst);
 
-    let buf0_addr = (&unsafe { IMG_BUF0 } as *const ImageFrameBuf) as usize;
-    let buf1_addr = (&unsafe { IMG_BUF1 } as *const ImageFrameBuf) as usize;
-    let buf2_addr = (&unsafe { IMG_BUF2 } as *const ImageFrameBuf) as usize;
-    BUF0_ADDR.store(buf0_addr, Ordering::Relaxed);
-    BUF1_ADDR.store(buf1_addr, Ordering::Relaxed);
-    BUF2_ADDR.store(buf2_addr, Ordering::Relaxed);
+    let buf0_addr = (&unsafe { IMG_BUF0 } as *const ImageFrameBuf);
+    let buf1_addr = (&unsafe { IMG_BUF1 } as *const ImageFrameBuf);
+    let buf2_addr = (&unsafe { IMG_BUF2 } as *const ImageFrameBuf);
     #[cfg(feature = "rttdebug")]
-    rprintln!("buf0 {:x} buf1 {:x} buf2 {:x}",buf0_addr, buf1_addr, buf2_addr);
+    rprintln!("buf0 {:x} buf1 {:x} buf2 {:x}",buf0_addr as usize, buf1_addr as usize, buf2_addr as usize);
+    unsafe {
+        BUF0_PTR = buf0_addr;
+        BUF1_PTR = buf1_addr;
+        BUF2_PTR = buf2_addr;
+    }
+    BUF0_ADDR.store(buf0_addr as usize, Ordering::Relaxed);
+    BUF1_ADDR.store(buf1_addr as usize, Ordering::Relaxed);
+    BUF2_ADDR.store(buf2_addr as usize, Ordering::Relaxed);
 
     stream1_chan1.m0ar.write(|w| unsafe { w.bits(buf0_addr as u32) });
     stream1_chan1.m1ar.write(|w| unsafe { w.bits(buf1_addr as u32) });
@@ -415,40 +449,38 @@ fn swap_idle_and_unused_buf(stream1_chan1: &pac::dma2::ST) {
     let m0ar = stream1_chan1.m0ar.read().bits();
     let m1ar = stream1_chan1.m1ar.read().bits();
 
-
-    let cur_unused = UNUSED_BUF_IDX.load(Ordering::Acquire);
+    let cur_unused = UNUSED_BUF_IDX.load(Ordering::SeqCst);
     let new_target = match cur_unused {
-        // 0 => (&unsafe { IMG_BUF0 } as *const ImageFrameBuf) as u32,
-        // 1 => (&unsafe { IMG_BUF1 } as *const ImageFrameBuf) as u32,
-        // 2 => (&unsafe { IMG_BUF2 } as *const ImageFrameBuf) as u32,
         0 =>  BUF0_ADDR.load(Ordering::SeqCst) as u32,
         1 =>  BUF1_ADDR.load(Ordering::SeqCst) as u32,
         2 =>  BUF2_ADDR.load(Ordering::SeqCst) as u32,
         _ => panic!("invalid cur_unused")
     };
 
-    #[cfg(feature = "rttdebug")]
-    rprintln!("mem0 {} ndtr {} m0ar {:x} m1ar {:x} new {:x}",targ_is_mem0, ndtr, m0ar, m1ar, new_target);
+    // #[cfg(feature = "rttdebug")]
+    // rprintln!("mem0 {} ndtr {} m0ar {:x} m1ar {:x} new {:x}",targ_is_mem0, ndtr, m0ar, m1ar, new_target);
 
     if targ_is_mem0 {
-        let cur_mem1 = MEM1_BUF_IDX.load(Ordering::SeqCst);
         // #[cfg(feature = "rttdebug")]
         // rprintln!("mem1 idle: {} unused: {} ", cur_mem1, cur_unused);
         //memory1 is idle, so swap an unused buffer into DMA_S2M1AR
+        let cur_mem1 = MEM1_BUF_IDX.load(Ordering::SeqCst);
         UNUSED_BUF_IDX.store(cur_mem1, Ordering::SeqCst);
         MEM1_BUF_IDX.store(cur_unused, Ordering::SeqCst);
         stream1_chan1.m1ar.write(|w| unsafe { w.bits(new_target) } );
     }
     else {
-        let cur_mem0 = MEM0_BUF_IDX.load(Ordering::SeqCst);
         // #[cfg(feature = "rttdebug")]
         // rprintln!("mem0 idle: {} unused: {} ", cur_mem0, cur_unused);
         //memory0 is idle, so swap an unused buffer into DMA_S2M0AR
+        let cur_mem0 = MEM0_BUF_IDX.load(Ordering::SeqCst);
         UNUSED_BUF_IDX.store(cur_mem0, Ordering::SeqCst);
         MEM0_BUF_IDX.store(cur_unused, Ordering::SeqCst);
         stream1_chan1.m0ar.write(|w| unsafe { w.bits(new_target) });
     }
 }
+
+
 
 
 pub static DCMI_CAP_COUNT: AtomicUsize = AtomicUsize::new(0);

@@ -24,6 +24,7 @@ break HardFault
 #break Board::new
 #break DMA2_STREAM1
 #break DCMI
+break DefaultHandler
 
 # don't confirm when quitting debugger
 define hook-quit
