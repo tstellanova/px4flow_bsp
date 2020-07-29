@@ -18,7 +18,10 @@ use crate::dcmi::DcmiWrapper;
 /// This contains both pre-initialized drivers for
 /// onboard devices as well as bus ports for external ports peripherals.
 pub struct Board<'a> {
-    pub user_leds: [LedOutputPin; 3],
+    pub activity_led: LedOutputActivity,
+    pub comms_led: LedOutputComm,
+    pub error_led: LedOutputError,
+
     pub delay_source: DelaySource,
     pub external_i2c1: I2c1BusManager,
     pub camera_config: Option<CameraConfigType<'a>>,
@@ -114,13 +117,15 @@ impl Board<'_> {
         cam_config.setup(&mut delay_source).expect("could not configure MT9V034");
 
         //enable interrupts and so forth after the i2c config
-        dcmi_wrap.enable_capture();
+        //TODO dcmi_wrap.enable_capture();
 
         Self {
+            activity_led: raw_user_leds.0,
+            comms_led: raw_user_leds.1,
+            error_led: raw_user_leds.2,
             external_i2c1: i2c1_bus_mgr,
             camera_config:  Some(cam_config),
             gyro: gyro_opt,
-            user_leds: [raw_user_leds.0, raw_user_leds.1, raw_user_leds.2],
             delay_source,
             eeprom: eeprom_opt,
             dcmi_wrap: Some(dcmi_wrap),

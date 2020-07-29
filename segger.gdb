@@ -18,7 +18,7 @@ monitor speed auto
 #set remote memory-write-packet-size fixed
 
 # break DefaultHandler
-break HardFault
+#break HardFault
 
 #break main
 #break Board::new

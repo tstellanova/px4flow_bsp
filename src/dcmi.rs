@@ -172,7 +172,7 @@ impl DcmiWrapper {
         rprintln!("00 dma2_fcr: {:#b}", stream1_chan1.fcr.read().bits());
         stream1_chan1.fcr.modify(|_, w| { w
             // disable direct mode
-            .dmdis().enabled() //TODO verify
+            .dmdis().enabled()
             // fifo threshold full
             .fth().full()
         });
@@ -337,6 +337,9 @@ impl DcmiWrapper {
         };
 
         let source = unsafe { raw_source.as_ref().unwrap() };
+
+        // #[cfg(feature = "rttdebug")]
+        // rprintln!("copy {} to {}",source.len(), dest.len());
         dest.copy_from_slice(source);
 
     }
@@ -410,7 +413,7 @@ pub fn dma2_stream1_irqhandler()
         .chtif1().set_bit()
     );
 
-    // let stream1_chan1 = &dma2.st[1];
+    let stream1_chan1 = &dma2.st[1];
     swap_idle_and_unused_buf(stream1_chan1);
 }
 

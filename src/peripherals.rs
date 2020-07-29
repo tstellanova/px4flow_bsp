@@ -29,7 +29,7 @@ use stm32f4xx_hal::timer::{PinC3, PinC4};
 /// PX4FLOW v2.3 chip is [STM32F407VGT6](https://www.mouser.com/datasheet/2/389/dm00037051-1797298.pdf)
 pub fn setup_peripherals() -> (
     //  user LEDs:
-    (LedOutputPin, LedOutputPin, LedOutputPin),
+    (LedOutputActivity, LedOutputComm, LedOutputError),
     DelaySource,
     I2c1Port,
     I2c2Port,
@@ -77,9 +77,16 @@ pub fn setup_peripherals() -> (
     let gpiod = dp.GPIOD.split();
     let gpioe = dp.GPIOE.split();
 
-    let user_led0 = gpioe.pe2.into_push_pull_output().downgrade(); //amber
-    let user_led1 = gpioe.pe3.into_push_pull_output().downgrade(); //blue
-    let user_led2 = gpioe.pe7.into_push_pull_output().downgrade(); //red
+    //activity LED
+    #[cfg(feature = "breakout")]
+        let user_led0 = gpioa.pa1.into_push_pull_output().set_speed(Speed::Low).downgrade();
+    #[cfg(not(feature = "breakout"))]
+        let user_led0 = gpioe.pe2.into_push_pull_output().downgrade();
+
+    // communications LED
+    let user_led1 = gpioe.pe3.into_push_pull_output().downgrade();
+    // error LED
+    let user_led2 = gpioe.pe7.into_push_pull_output().downgrade();
 
     //i2c1 port used for eg external (offboard) communication
     let i2c1_port = {
@@ -308,7 +315,19 @@ pub type DcmiDataPins = (
     p_hal::gpio::gpioc::PC12<DcmiParallelDataPin>, // D9
 );
 
-pub type LedOutputPin = p_hal::gpio::gpioe::PE<Output<PushPull>>;
+pub type LedOutputPinA = p_hal::gpio::gpioa::PA<Output<PushPull>>;
+pub type LedOutputPinE = p_hal::gpio::gpioe::PE<Output<PushPull>>;
+
+
+#[cfg(feature = "breakout")]
+pub type LedOutputActivity = LedOutputPinA; // blue on original px4flow
+#[cfg(not(feature = "breakout"))]
+pub type LedOutputActivity = LedOutputPinE; // blue on original px4flow
+pub type LedOutputComm = LedOutputPinE; // amber on original px4flow
+pub type LedOutputError = LedOutputPinE; // red on original px4flow
+
+
+
 pub type DelaySource = p_hal::delay::Delay;
 
 pub type UsartIoPin = p_hal::gpio::Alternate<p_hal::gpio::AF7>;
