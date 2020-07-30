@@ -18,12 +18,13 @@ monitor speed auto
 #set remote memory-write-packet-size fixed
 
 # break DefaultHandler
-break HardFault
+#break HardFault
 
 #break main
 #break Board::new
 #break DMA2_STREAM1
 #break DCMI
+break DefaultHandler
 
 # don't confirm when quitting debugger
 define hook-quit

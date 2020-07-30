@@ -8,12 +8,20 @@ MEMORY
   but we reserve space for the default PX4 bootloader */
   BLFLASH :   ORIGIN = 0x08000000, LENGTH = 16K
   FLASH  :    ORIGIN = 0x08004000, LENGTH = 1008K
-  CCSRAM :    ORIGIN = 0x10000000, LENGTH = 64K
+  CCMRAM :    ORIGIN = 0x10000000, LENGTH = 64K
   RAM   :     ORIGIN = 0x20000000, LENGTH = 128K
 
 
 }
 
+SECTIONS
+{
+    .ccmram (NOLOAD) : ALIGN(4)
+    {
+        *(.ccmram .ccmram.*);
+        . = ALIGN(4);
+    } > CCMRAM
+} INSERT AFTER .bss;
 
 /*
 This is where the call stack will be allocated.
