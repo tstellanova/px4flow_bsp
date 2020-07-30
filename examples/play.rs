@@ -61,8 +61,13 @@ fn main() -> ! {
     let _  = board.error_led.set_high();
 
     //for now we turn on a gray test pattern
+    // 0x0800 : vertical shade
+    // 0x1000 : horizontal shade
+    // 0x1800 : diagonal shade
+    // 0x2000 : enable
+
     let _ = board.camera_config.as_mut().unwrap().
-        enable_pixel_test_pattern(true, 0x3000);
+        enable_pixel_test_pattern(true, 0x2800);
     if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
         dcmi_wrap.enable_capture();
     }
