@@ -4,4 +4,6 @@ Cargo.lock
 .idea
 .DS_Store
 /capture
+/sessions
+.python-version
 
