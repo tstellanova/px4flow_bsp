@@ -1,7 +1,7 @@
 use crate::peripherals::*;
 use embedded_hal::blocking::delay::DelayMs;
 
-use eeprom24x::{Eeprom24x};
+use eeprom24x::Eeprom24x;
 use embedded_hal::digital::v1_compat::OldOutputPin;
 use l3gd20::L3gd20;
 use mt9v034_i2c::Mt9v034;
@@ -9,10 +9,9 @@ use mt9v034_i2c::Mt9v034;
 use core::sync::atomic::{AtomicPtr, Ordering};
 use cortex_m::singleton;
 
+use crate::dcmi::DcmiWrapper;
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
-use crate::dcmi::DcmiWrapper;
-
 
 /// The main Board support type:
 /// This contains both pre-initialized drivers for
@@ -51,20 +50,19 @@ impl Board<'_> {
             dcmi_ctrl_pins,
             dcmi_data_pins,
             dma2,
-            dcmi
+            dcmi,
         ) = setup_peripherals();
 
         //TODO verify we are safe to forget the DCMI pins after configuration
         core::mem::forget(dcmi_ctrl_pins);
         core::mem::forget(dcmi_data_pins);
 
-
         // Since any number of devices could sit on the external i2c1 port,
         //  we should treat it as a shared bus
         let i2c1_bus_mgr = shared_bus::CortexMBusManager::new(i2c1_port);
 
         let mut gyro_opt: Option<_> = None;
-        #[cfg(not(feature="breakout"))]
+        #[cfg(not(feature = "breakout"))]
         {
             let old_gyro_csn = OldOutputPin::new(spi_cs_gyro);
             if let Ok(mut gyro) = L3gd20::new(spi2_port, old_gyro_csn) {
@@ -82,10 +80,10 @@ impl Board<'_> {
         let i2c2_bus_mgr: &'static mut I2c2BusManager =
             singleton!(:I2c2BusManager =
                 shared_bus::CortexMBusManager::new(i2c2_port)
-            ).unwrap();
+            )
+            .unwrap();
 
-
-        let mut  eeprom_opt = None;
+        let mut eeprom_opt = None;
         #[cfg(not(feature = "breakout"))]
         {
             #[cfg(feature = "rttdebug")]
@@ -93,7 +91,10 @@ impl Board<'_> {
             let eeprom_i2c_address = eeprom24x::SlaveAddr::default();
             const PARAM_ADDRESS: u32 = 0x1234;
 
-            let mut eeprom = Eeprom24x::new_24x128(i2c2_bus_mgr.acquire(), eeprom_i2c_address);
+            let mut eeprom = Eeprom24x::new_24x128(
+                i2c2_bus_mgr.acquire(),
+                eeprom_i2c_address,
+            );
             eeprom.write_byte(PARAM_ADDRESS, 0xAA).unwrap();
             delay_source.delay_ms(5u8);
 
@@ -107,35 +108,35 @@ impl Board<'_> {
         let mut dcmi_wrap = DcmiWrapper::new(dcmi, dma2);
         dcmi_wrap.setup();
 
-
         #[cfg(feature = "breakout")]
-            let base_i2c_address = mt9v034_i2c::ARDUCAM_BREAKOUT_ADDRESS;
+        let base_i2c_address = mt9v034_i2c::ARDUCAM_BREAKOUT_ADDRESS;
         #[cfg(not(feature = "breakout"))]
-            let base_i2c_address=    mt9v034_i2c::PX4FLOW_CAM_ADDRESS;
+        let base_i2c_address = mt9v034_i2c::PX4FLOW_CAM_ADDRESS;
         let mut cam_config =
             Mt9v034::new(i2c2_bus_mgr.acquire(), base_i2c_address);
-        cam_config.setup(&mut delay_source).expect("could not configure MT9V034");
+        cam_config
+            .setup(&mut delay_source)
+            .expect("could not configure MT9V034");
 
         // Note that we do not call dcmi_wrap.enable_capture() here --
-        // instead we allow our consumer to do that if desired. 
+        // instead we allow our consumer to do that if desired.
 
         Self {
             activity_led: raw_user_leds.0,
             comms_led: raw_user_leds.1,
             error_led: raw_user_leds.2,
             external_i2c1: i2c1_bus_mgr,
-            camera_config:  Some(cam_config),
+            camera_config: Some(cam_config),
             gyro: gyro_opt,
             delay_source,
             eeprom: eeprom_opt,
             dcmi_wrap: Some(dcmi_wrap),
             usart2,
             usart3,
-            uart4
+            uart4,
         }
     }
 }
-
 
 pub type BusManager<Port> = shared_bus::proxy::BusManager<
     cortex_m::interrupt::Mutex<core::cell::RefCell<Port>>,

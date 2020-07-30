@@ -44,6 +44,7 @@ Work in progress
 - [x] Initial setup of DCMI peripheral
 - [x] Initial setup of DMA2 
 - [x] Mostly working DCMI->DMA2-> image buffer pipeline
+- [ ] Allow configurable / full-frame image buffers (currently limited to 64x64)
 
 ## Notes
 - The only supported mode for debugging is RTT with the `rttdebug` feature. This is because 

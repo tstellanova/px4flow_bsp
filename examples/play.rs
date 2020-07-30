@@ -7,8 +7,8 @@ LICENSE: BSD3 (see LICENSE file)
 #![no_std]
 
 use cortex_m_rt as rt;
-use rt::{entry};
 use p_hal::stm32 as pac;
+use rt::entry;
 use stm32f4xx_hal as p_hal;
 
 use pac::interrupt;
@@ -21,10 +21,9 @@ use embedded_hal::digital::v2::ToggleableOutputPin;
 const GYRO_REPORTING_RATE_HZ: u16 = 95;
 const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 
-use px4flow_bsp::{board::Board, dcmi};
-use px4flow_bsp::dcmi::{DcmiWrapper, ImageFrameBuf, IMG_FRAME_BUF_LEN};
 use mt9v034_i2c::PixelTestPattern;
-
+use px4flow_bsp::dcmi::{DcmiWrapper, ImageFrameBuf, IMG_FRAME_BUF_LEN};
+use px4flow_bsp::{board::Board, dcmi};
 
 /// should be called whenever DMA2 completes a transfer
 #[interrupt]
@@ -40,13 +39,11 @@ fn DCMI() {
     dcmi::dcmi_irqhandler();
 }
 
-
 /// Setup close-coupled RAM buffers for faster image manipulation
 #[link_section = ".ccmram.IMG_BUFS"]
-static mut FAST_IMG0:ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
+static mut FAST_IMG0: ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
 #[link_section = ".ccmram.IMG_BUFS"]
-static mut FAST_IMG1:ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
-
+static mut FAST_IMG1: ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
 
 #[entry]
 fn main() -> ! {
@@ -58,9 +55,9 @@ fn main() -> ! {
     let loop_interval = GYRO_REPORTING_INTERVAL_MS as u8;
     rprintln!("loop_interval: {}", loop_interval);
 
-    let _  = board.activity_led.set_high();
-    let _  = board.comms_led.set_high();
-    let _  = board.error_led.set_high();
+    let _ = board.activity_led.set_high();
+    let _ = board.comms_led.set_high();
+    let _ = board.error_led.set_high();
 
     // This is how we can enable the grayscale test pattern
     // let _ = board.camera_config.as_mut().unwrap().
@@ -85,15 +82,18 @@ fn main() -> ! {
                 let avail_frames = dcmi_wrap.available_frame_count();
                 if avail_frames > 0 {
                     //rprintln!("avail: {}", avail_frames);
-                    let dst =
-                        if flow_img_idx == 0 { unsafe { &mut FAST_IMG0 } } else { unsafe { &mut FAST_IMG1 } };
+                    let dst = if flow_img_idx == 0 {
+                        unsafe { &mut FAST_IMG0 }
+                    } else {
+                        unsafe { &mut FAST_IMG1 }
+                    };
                     dcmi_wrap.copy_image_buf(dst);
                     flow_img_idx = (flow_img_idx + 1) % 2;
 
                     // this simply dumps all of the received pixel data --
                     // in a real application we'd do something more substantial with the data
                     let _ = board.activity_led.toggle();
-                    for i in 0..4096  {
+                    for i in 0..4096 {
                         rprint!("{:x},", dst[i]);
                     }
                     rprintln!("---");
@@ -102,5 +102,4 @@ fn main() -> ! {
         }
         let _ = board.comms_led.toggle();
     }
-
 }

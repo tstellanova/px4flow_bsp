@@ -14,8 +14,8 @@ use embedded_hal::timer::CountDown;
 use embedded_hal::PwmPin;
 use p_hal::timer::{self, Timer};
 
-use p_hal::pwm;
 use p_hal::gpio::{GpioExt, Output, PushPull, Speed};
+use p_hal::pwm;
 use p_hal::rcc::RccExt;
 use p_hal::time::U32Ext;
 
@@ -41,7 +41,7 @@ pub fn setup_peripherals() -> (
     DcmiCtrlPins,
     DcmiDataPins,
     pac::DMA2,
-    pac::DCMI
+    pac::DCMI,
 ) {
     let mut dp = pac::Peripherals::take().unwrap();
     let mut cp = cortex_m::Peripherals::take().unwrap();
@@ -61,10 +61,8 @@ pub fn setup_peripherals() -> (
     //enable DCMI and DMA clocks before configuring their pins
     let rcc2 = unsafe { &(*RCC::ptr()) };
     // enable peripheral clocks for DCMI and DMA2
-    rcc2.ahb2enr
-        .modify(|_, w| w.dcmien().set_bit());
-    rcc2.ahb1enr
-        .modify(|_, w| w.dma2en().set_bit());
+    rcc2.ahb2enr.modify(|_, w| w.dcmien().set_bit());
+    rcc2.ahb1enr.modify(|_, w| w.dma2en().set_bit());
 
     // let hclk = clocks.hclk();
     // let pll48clk = clocks.pll48clk().unwrap_or(0u32.hz());
@@ -79,9 +77,13 @@ pub fn setup_peripherals() -> (
 
     //activity LED
     #[cfg(feature = "breakout")]
-        let user_led0 = gpioa.pa1.into_push_pull_output().set_speed(Speed::Low).downgrade();
+    let user_led0 = gpioa
+        .pa1
+        .into_push_pull_output()
+        .set_speed(Speed::Low)
+        .downgrade();
     #[cfg(not(feature = "breakout"))]
-        let user_led0 = gpioe.pe2.into_push_pull_output().downgrade();
+    let user_led0 = gpioe.pe2.into_push_pull_output().downgrade();
 
     // communications LED
     let user_led1 = gpioe.pe3.into_push_pull_output().downgrade();
@@ -100,11 +102,15 @@ pub fn setup_peripherals() -> (
     let i2c2_port = {
         // on the actual px4flow hw, there are external pullups on the i2c lines;
         // however, stm32f407 breakout boards do not have these, so we add an internal pullup.
-        let scl = gpiob.pb10.into_alternate_af4()
+        let scl = gpiob
+            .pb10
+            .into_alternate_af4()
             .internal_pull_up(true)
             .set_speed(Speed::Low)
             .set_open_drain(); //J2C2_SCL
-        let sda = gpiob.pb11.into_alternate_af4()
+        let sda = gpiob
+            .pb11
+            .into_alternate_af4()
             .internal_pull_up(true)
             .set_speed(Speed::Low)
             .set_open_drain(); //J2C2_SDA
@@ -117,7 +123,8 @@ pub fn setup_peripherals() -> (
             p_hal::serial::config::Config::default().baudrate(115200.bps());
         let tx = gpiod.pd5.into_alternate_af7();
         let rx = gpiod.pd6.into_alternate_af7();
-        p_hal::serial::Serial::usart2(dp.USART2, (tx, rx), config, clocks).unwrap()
+        p_hal::serial::Serial::usart2(dp.USART2, (tx, rx), config, clocks)
+            .unwrap()
     };
 
     let usart3_port = {
@@ -126,7 +133,8 @@ pub fn setup_peripherals() -> (
             p_hal::serial::config::Config::default().baudrate(115200.bps());
         let tx = gpiod.pd8.into_alternate_af7();
         let rx = gpiod.pd9.into_alternate_af7();
-        p_hal::serial::Serial::usart3(dp.USART3, (tx, rx), config, clocks).unwrap()
+        p_hal::serial::Serial::usart3(dp.USART3, (tx, rx), config, clocks)
+            .unwrap()
     };
 
     let uart4_port = {
@@ -134,7 +142,8 @@ pub fn setup_peripherals() -> (
             p_hal::serial::config::Config::default().baudrate(9600.bps());
         let tx = gpioa.pa0.into_alternate_af8(); // UART4_TX normally unused (no connection)
         let rx = gpioc.pc11.into_alternate_af8(); // UART4_RX
-        p_hal::serial::Serial::uart4(dp.UART4, (tx, rx), config, clocks).unwrap()
+        p_hal::serial::Serial::uart4(dp.UART4, (tx, rx), config, clocks)
+            .unwrap()
     };
 
     // used for gyro
@@ -179,34 +188,84 @@ pub fn setup_peripherals() -> (
             .internal_pull_up(true)
             .set_speed(Speed::VeryHigh); //s/b 100 MHz Pullup
 
-            (pixck, hsync, vsync)
+        (pixck, hsync, vsync)
     };
-
 
     // DCMI digital camera interface pins (AF13)
     // this board supports ten parallel lines D0-D9
     let dcmi_data_pins = (
-        gpioc.pc6.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D0
-        gpioc.pc7.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D1
-        gpioe.pe0.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D2
-        gpioe.pe1.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D3
-        gpioe.pe4.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D4
-        gpiob.pb6.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D5
-        gpioe.pe5.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D6
-        gpioe.pe6.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh),  // DCMI_D7
-        gpioc.pc10.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh), // DCMI_D8
-        gpioc.pc12.into_pull_up_input().into_alternate_af13().internal_pull_up(true).set_speed(Speed::VeryHigh), // DCMI_D9
+        gpioc
+            .pc6
+            .into_pull_up_input()
+            .into_alternate_af13()
+            .internal_pull_up(true)
+            .set_speed(Speed::VeryHigh), // DCMI_D0
+        gpioc
+            .pc7
+            .into_pull_up_input()
+            .into_alternate_af13()
+            .internal_pull_up(true)
+            .set_speed(Speed::VeryHigh), // DCMI_D1
+        gpioe
+            .pe0
+            .into_pull_up_input()
+            .into_alternate_af13()
+            .internal_pull_up(true)
+            .set_speed(Speed::VeryHigh), // DCMI_D2
+        gpioe
+            .pe1
+            .into_pull_up_input()
+            .into_alternate_af13()
+            .internal_pull_up(true)
+            .set_speed(Speed::VeryHigh), // DCMI_D3
+        gpioe
+            .pe4
+            .into_pull_up_input()
+            .into_alternate_af13()
+            .internal_pull_up(true)
+            .set_speed(Speed::VeryHigh), // DCMI_D4
+        gpiob
+            .pb6
+            .into_pull_up_input()
+            .into_alternate_af13()
+            .internal_pull_up(true)
+            .set_speed(Speed::VeryHigh), // DCMI_D5
+        gpioe
+            .pe5
+            .into_pull_up_input()
+            .into_alternate_af13()
+            .internal_pull_up(true)
+            .set_speed(Speed::VeryHigh), // DCMI_D6
+        gpioe
+            .pe6
+            .into_pull_up_input()
+            .into_alternate_af13()
+            .internal_pull_up(true)
+            .set_speed(Speed::VeryHigh), // DCMI_D7
+        gpioc
+            .pc10
+            .into_pull_up_input()
+            .into_alternate_af13()
+            .internal_pull_up(true)
+            .set_speed(Speed::VeryHigh), // DCMI_D8
+        gpioc
+            .pc12
+            .into_pull_up_input()
+            .into_alternate_af13()
+            .internal_pull_up(true)
+            .set_speed(Speed::VeryHigh), // DCMI_D9
     );
-
 
     let dcmi = dp.DCMI;
     let dma2 = dp.DMA2;
 
     //configure PA2, PA3 as EXPOSURE and STANDBY PP output lines 2MHz
     // TIM5_CH3_EXPOSURE
-    let mut exposure_line = gpioa.pa2.into_push_pull_output().set_speed(Speed::Low);
+    let mut exposure_line =
+        gpioa.pa2.into_push_pull_output().set_speed(Speed::Low);
     // TIM5_CH4_STANDBY
-    let mut standby_line = gpioa.pa3.into_push_pull_output().set_speed(Speed::Low);
+    let mut standby_line =
+        gpioa.pa3.into_push_pull_output().set_speed(Speed::Low);
     //clear these lines:
     let _ = exposure_line.set_low();
     let _ = standby_line.set_low();
@@ -224,7 +283,7 @@ pub fn setup_peripherals() -> (
     );
     let (mut ch1, _ch2) = pwm::tim3(dp.TIM3, channels, clocks, 24u32.mhz());
     let max_duty = ch1.get_max_duty();
-    let duty_avg =  (max_duty / 2) + 1;
+    let duty_avg = (max_duty / 2) + 1;
 
     #[cfg(feature = "rttdebug")]
     rprintln!("duty cycle: {} max: {}", duty_avg, max_duty);
@@ -248,7 +307,7 @@ pub fn setup_peripherals() -> (
         dcmi_ctrl_pins,
         dcmi_data_pins,
         dma2,
-        dcmi
+        dcmi,
     )
 }
 
@@ -318,7 +377,6 @@ pub type DcmiDataPins = (
 pub type LedOutputPinA = p_hal::gpio::gpioa::PA<Output<PushPull>>;
 pub type LedOutputPinE = p_hal::gpio::gpioe::PE<Output<PushPull>>;
 
-
 #[cfg(feature = "breakout")]
 pub type LedOutputActivity = LedOutputPinA; // blue on original px4flow
 #[cfg(not(feature = "breakout"))]
@@ -326,22 +384,31 @@ pub type LedOutputActivity = LedOutputPinE; // blue on original px4flow
 pub type LedOutputComm = LedOutputPinE; // amber on original px4flow
 pub type LedOutputError = LedOutputPinE; // red on original px4flow
 
-
-
 pub type DelaySource = p_hal::delay::Delay;
 
 pub type UsartIoPin = p_hal::gpio::Alternate<p_hal::gpio::AF7>;
 
-pub type Usart2Port = p_hal::serial::Serial<pac::USART2,
-    (p_hal::gpio::gpiod::PD5<UsartIoPin>,
-    p_hal::gpio::gpiod::PD6<UsartIoPin>)>;
-pub type Usart3Port = p_hal::serial::Serial<pac::USART3,
-    (p_hal::gpio::gpiod::PD8<UsartIoPin>,
-     p_hal::gpio::gpiod::PD9<UsartIoPin>)>;
+pub type Usart2Port = p_hal::serial::Serial<
+    pac::USART2,
+    (
+        p_hal::gpio::gpiod::PD5<UsartIoPin>,
+        p_hal::gpio::gpiod::PD6<UsartIoPin>,
+    ),
+>;
+pub type Usart3Port = p_hal::serial::Serial<
+    pac::USART3,
+    (
+        p_hal::gpio::gpiod::PD8<UsartIoPin>,
+        p_hal::gpio::gpiod::PD9<UsartIoPin>,
+    ),
+>;
 
 pub type UartIoPin = p_hal::gpio::Alternate<p_hal::gpio::AF8>;
 
-pub type Uart4Port = p_hal::serial::Serial<pac::UART4,
-    (p_hal::gpio::gpioa::PA0<UartIoPin>,
-     p_hal::gpio::gpioc::PC11<UartIoPin>)>;
-
+pub type Uart4Port = p_hal::serial::Serial<
+    pac::UART4,
+    (
+        p_hal::gpio::gpioa::PA0<UartIoPin>,
+        p_hal::gpio::gpioc::PC11<UartIoPin>,
+    ),
+>;
