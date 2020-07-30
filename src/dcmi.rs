@@ -365,9 +365,9 @@ impl DcmiWrapper {
 
     pub fn available_frame_count(&mut self) -> usize {
         static LAST_FRAME_COUNT:AtomicUsize = AtomicUsize::new(0);
-        let cur_frame_count = DCMI_CAP_COUNT.load(Ordering::Relaxed);
-        let diff = cur_frame_count - LAST_FRAME_COUNT.load(Ordering::Relaxed);
-        LAST_FRAME_COUNT.store(cur_frame_count, Ordering::Relaxed);
+        let cur_frame_count = DCMI_CAP_COUNT.load(Ordering::SeqCst);
+        let diff = cur_frame_count - LAST_FRAME_COUNT.load(Ordering::SeqCst);
+        LAST_FRAME_COUNT.store(cur_frame_count, Ordering::SeqCst);
 
         diff
     }
@@ -375,19 +375,13 @@ impl DcmiWrapper {
     /// Dump count of captures and dma transfers to rtt
     #[cfg(feature = "rttdebug")]
     pub fn dump_counts() {
-        let cap_count = DCMI_CAP_COUNT.load(Ordering::Relaxed);
-        let xfer_count = DCMI_DMA_IT_COUNT.load(Ordering::Relaxed);
+        let cap_count = DCMI_CAP_COUNT.load(Ordering::SeqCst);
+        let xfer_count = DCMI_DMA_IT_COUNT.load(Ordering::SeqCst);
         if xfer_count > 0 || cap_count > 0 {
             rprintln!("caps: {} xfers: {}", cap_count, xfer_count);
         }
     }
 
-    #[cfg(feature = "rttdebug")]
-    pub fn dump_imgbuf1() {
-        unsafe {
-            rprintln!("imgbuf1 {:x?}",&IMG_BUF1[0..4]);
-        }
-    }
 
     // currently we can't easily coerce pointers to u32 in const context,
     // but here's how we would calculate the DCMI peripheral address for DMA:
@@ -402,7 +396,7 @@ pub static DCMI_DMA_IT_COUNT: AtomicUsize = AtomicUsize::new(0);
 pub fn dma2_stream1_irqhandler()
 {
     // dma2 transfer from DCMI to memory completed
-    DCMI_DMA_IT_COUNT.fetch_add(1, Ordering::Relaxed);
+    DCMI_DMA_IT_COUNT.fetch_add(1, Ordering::SeqCst);
 
     let dma2 = unsafe { &(*pac::DMA2::ptr()) };
 
@@ -415,6 +409,7 @@ pub fn dma2_stream1_irqhandler()
 
     let stream1_chan1 = &dma2.st[1];
     swap_idle_and_unused_buf(stream1_chan1);
+
 }
 
 
@@ -434,9 +429,9 @@ fn init_dma_buffers(stream1_chan1: &pac::dma2::ST) {
         BUF1_PTR = buf1_addr;
         BUF2_PTR = buf2_addr;
     }
-    BUF0_ADDR.store(buf0_addr as usize, Ordering::Relaxed);
-    BUF1_ADDR.store(buf1_addr as usize, Ordering::Relaxed);
-    BUF2_ADDR.store(buf2_addr as usize, Ordering::Relaxed);
+    BUF0_ADDR.store(buf0_addr as usize, Ordering::SeqCst);
+    BUF1_ADDR.store(buf1_addr as usize, Ordering::SeqCst);
+    BUF2_ADDR.store(buf2_addr as usize, Ordering::SeqCst);
 
     stream1_chan1.m0ar.write(|w| unsafe { w.bits(buf0_addr as u32) });
     stream1_chan1.m1ar.write(|w| unsafe { w.bits(buf1_addr as u32) });
@@ -448,9 +443,9 @@ fn init_dma_buffers(stream1_chan1: &pac::dma2::ST) {
 fn swap_idle_and_unused_buf(stream1_chan1: &pac::dma2::ST) {
     // is DMA2 currently writing to memory0 ?
     let targ_is_mem0 = stream1_chan1.cr.read().ct().is_memory0();
-    let ndtr = stream1_chan1.ndtr.read().bits();
-    let m0ar = stream1_chan1.m0ar.read().bits();
-    let m1ar = stream1_chan1.m1ar.read().bits();
+    // let ndtr = stream1_chan1.ndtr.read().bits();
+    // let m0ar = stream1_chan1.m0ar.read().bits();
+    // let m1ar = stream1_chan1.m1ar.read().bits();
 
     let cur_unused = UNUSED_BUF_IDX.load(Ordering::SeqCst);
     let new_target = match cur_unused {
@@ -461,7 +456,7 @@ fn swap_idle_and_unused_buf(stream1_chan1: &pac::dma2::ST) {
     };
 
     // #[cfg(feature = "rttdebug")]
-    // rprintln!("mem0 {} ndtr {} m0ar {:x} m1ar {:x} new {:x}",targ_is_mem0, ndtr, m0ar, m1ar, new_target);
+    // rprintln!("mem0 {} ndtr {} m0ar {:x} m1ar {:x} new {:x}", targ_is_mem0, ndtr, m0ar, m1ar, new_target);
 
     if targ_is_mem0 {
         // #[cfg(feature = "rttdebug")]
@@ -491,7 +486,7 @@ pub static DCMI_CAP_COUNT: AtomicUsize = AtomicUsize::new(0);
 /// Call this from DCMI interrupt
 pub fn dcmi_irqhandler()
 {
-    DCMI_CAP_COUNT.fetch_add(1, Ordering::Relaxed);
+    DCMI_CAP_COUNT.fetch_add(1, Ordering::SeqCst);
 
     let dcmi = unsafe { &(*pac::DCMI::ptr()) };
     #[cfg(feature = "rttdebug")]
