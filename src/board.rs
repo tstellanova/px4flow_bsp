@@ -116,8 +116,8 @@ impl Board<'_> {
             Mt9v034::new(i2c2_bus_mgr.acquire(), base_i2c_address);
         cam_config.setup(&mut delay_source).expect("could not configure MT9V034");
 
-        //enable interrupts and so forth after the i2c config
-        //TODO dcmi_wrap.enable_capture();
+        // Note that we do not call dcmi_wrap.enable_capture() here --
+        // instead we allow our consumer to do that if desired. 
 
         Self {
             activity_led: raw_user_leds.0,
