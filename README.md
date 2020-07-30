@@ -43,11 +43,11 @@ Work in progress
 - [x] Support for serial eeprom on i2c2
 - [x] Initial setup of DCMI peripheral
 - [x] Initial setup of DMA2 
-- [ ] Fully working DCMI->DMA2-> image buffer pipeline
+- [x] Mostly working DCMI->DMA2-> image buffer pipeline
 
 ## Notes
 - The only supported mode for debugging is RTT with the `rttdebug` feature. This is because 
-the PX4FLOW v2.3 only makes the SWD interface available (no easy ITM solution).
+the PX4FLOW 1.x and 2.x boards only make the SWD interface available (no easy ITM solution).
 - The `breakout` feature is intended for library development and debugging purposes.
 Currently it's setup to work with the "DevEBox STM32F4XX_M Ver:3.0" board, which does not
 include a l3gd20 gyro or eeprom, and eg the Arducam MT9V034 breakout board ("UC-396 RevA")
