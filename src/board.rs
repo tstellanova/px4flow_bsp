@@ -33,7 +33,7 @@ pub struct Board<'a> {
 }
 
 impl Board<'_> {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         #[cfg(feature = "rttdebug")]
         rprintln!("new board");
 
@@ -105,7 +105,7 @@ impl Board<'_> {
         }
 
         //
-        let mut dcmi_wrap = DcmiWrapper::new(dcmi, dma2);
+        let mut dcmi_wrap = DcmiWrapper::default(dcmi, dma2);
         dcmi_wrap.setup();
 
         #[cfg(feature = "breakout")]

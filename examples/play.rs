@@ -21,7 +21,7 @@ use embedded_hal::digital::v2::ToggleableOutputPin;
 const GYRO_REPORTING_RATE_HZ: u16 = 95;
 const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 
-use mt9v034_i2c::PixelTestPattern;
+// use mt9v034_i2c::PixelTestPattern;
 use px4flow_bsp::dcmi::{DcmiWrapper, ImageFrameBuf, IMG_FRAME_BUF_LEN};
 use px4flow_bsp::{board::Board, dcmi};
 
@@ -50,7 +50,7 @@ fn main() -> ! {
     rtt_init_print!(NoBlockTrim);
     rprintln!("-- > MAIN --");
 
-    let mut board = Board::new();
+    let mut board = Board::default();
 
     let loop_interval = GYRO_REPORTING_INTERVAL_MS as u8;
     rprintln!("loop_interval: {}", loop_interval);
