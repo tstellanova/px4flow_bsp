@@ -61,8 +61,8 @@ fn main() -> ! {
     let _ = board.error_led.set_high();
 
     // This is how we can enable the grayscale test pattern
-    let _ = board.camera_config.as_mut().unwrap().
-        enable_pixel_test_pattern(true, PixelTestPattern::DiagonalShade);
+    // let _ = board.camera_config.as_mut().unwrap().
+    //     enable_pixel_test_pattern(true, PixelTestPattern::DiagonalShade);
 
     if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
         dcmi_wrap.enable_capture();
