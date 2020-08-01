@@ -329,15 +329,14 @@ impl DcmiWrapper
 
         let mut stream1_chan1 = &self.dma2.st[1];
 
-        #[cfg(feature = "rttdebug")]
-        rprintln!("04 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
+        // #[cfg(feature = "rttdebug")]
+        // rprintln!("04 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
 
         stream1_chan1.cr.modify(|_, w| {
             w
-                // Half transfer interrupt enable
-                .htie()
-                .enabled()
-                // Transfer complete interrupt enable
+                // Note: add this to enable Half transfer interrupt:
+                //.htie().enabled()
+                // Transfer complete interrupt enable:
                 .tcie()
                 .enabled()
         });
@@ -349,6 +348,8 @@ impl DcmiWrapper
     /// copy data from the currently buffer into the provided slice
     pub fn copy_image_buf(&mut self, dest: &mut [u8]) {
         let cur_unused = UNUSED_BUF_IDX.load(Ordering::SeqCst);
+        // reset the counter of transferred frames
+        UNREAD_FRAMES_COUNT.store(0, Ordering::SeqCst);
 
         let raw_source = unsafe {
             match cur_unused {
@@ -361,9 +362,7 @@ impl DcmiWrapper
 
         let source = unsafe { raw_source.as_ref().unwrap() };
 
-        // #[cfg(feature = "rttdebug")]
-        // rprintln!("copy {} to {}",source.len(), dest.len());
-        dest.copy_from_slice(source);
+        dest.copy_from_slice(&source[0..dest.len()]);
     }
 
     #[cfg(feature = "rttdebug")]
@@ -385,13 +384,9 @@ impl DcmiWrapper
         // }
     }
 
+    /// Returns the number of frames that have been transferred since the last `copy_image_buf`
     pub fn available_frame_count(&mut self) -> usize {
-        static LAST_FRAME_COUNT: AtomicUsize = AtomicUsize::new(0);
-        let cur_frame_count = DCMI_CAP_COUNT.load(Ordering::SeqCst);
-        let diff = cur_frame_count - LAST_FRAME_COUNT.load(Ordering::SeqCst);
-        LAST_FRAME_COUNT.store(cur_frame_count, Ordering::SeqCst);
-
-        diff
+        return UNREAD_FRAMES_COUNT.load(Ordering::SeqCst)
     }
 
     /// Dump count of captures and dma transfers to rtt
@@ -411,25 +406,31 @@ impl DcmiWrapper
     const DCMI_PERIPH_ADDR: u32 = 0x5005_0028;
 }
 
-pub static DCMI_DMA_IT_COUNT: AtomicUsize = AtomicUsize::new(0);
+/// Counts the number of DMA interrupts
+static DCMI_DMA_IT_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+/// Stores the number of frames that have been transferred since `copy_image_buf` was last called.
+static UNREAD_FRAMES_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 /// Call this from DMA2_STREAM1 interrupt
 pub fn dma2_stream1_irqhandler() {
     // dma2 transfer from DCMI to memory completed
     DCMI_DMA_IT_COUNT.fetch_add(1, Ordering::SeqCst);
+    UNREAD_FRAMES_COUNT.fetch_add(1, Ordering::SeqCst);
 
     let dma2 = unsafe { &(*pac::DMA2::ptr()) };
 
     // clear any pending interrupt bits by writing to LIFCR:
     // this clears the corresponding TCIFx flag in the DMA2 LISR register
     dma2.lifcr
-        .write(|w| w.ctcif1().set_bit().chtif1().set_bit());
+        .write(|w| w.ctcif1().set_bit());
+    //NOTE add .chtif1().set_bit() in order to clear half transfer interrupt
 
     let stream1_chan1 = &dma2.st[1];
     swap_idle_and_unused_buf(stream1_chan1);
 }
 
-/// initialize the buffers used for double-buffering with DMA2
+/// Initializes the buffers used for double-buffering with DMA2
 fn init_dma_buffers(stream1_chan1: &pac::dma2::ST) {
     MEM0_BUF_IDX.store(0, Ordering::SeqCst);
     MEM1_BUF_IDX.store(1, Ordering::SeqCst);
@@ -467,7 +468,7 @@ fn init_dma_buffers(stream1_chan1: &pac::dma2::ST) {
 fn swap_idle_and_unused_buf(stream1_chan1: &pac::dma2::ST) {
     // is DMA2 currently writing to memory0 ?
     let targ_is_mem0 = stream1_chan1.cr.read().ct().is_memory0();
-    // let ndtr = stream1_chan1.ndtr.read().bits();
+    //let ndtr = stream1_chan1.ndtr.read().bits();
     // let m0ar = stream1_chan1.m0ar.read().bits();
     // let m1ar = stream1_chan1.m1ar.read().bits();
 
@@ -483,16 +484,12 @@ fn swap_idle_and_unused_buf(stream1_chan1: &pac::dma2::ST) {
     // rprintln!("mem0 {} ndtr {} m0ar {:x} m1ar {:x} new {:x}", targ_is_mem0, ndtr, m0ar, m1ar, new_target);
 
     if targ_is_mem0 {
-        // #[cfg(feature = "rttdebug")]
-        // rprintln!("mem1 idle: {} unused: {} ", cur_mem1, cur_unused);
         //memory1 is idle, so swap an unused buffer into DMA_S2M1AR
         let cur_mem1 = MEM1_BUF_IDX.load(Ordering::SeqCst);
         UNUSED_BUF_IDX.store(cur_mem1, Ordering::SeqCst);
         MEM1_BUF_IDX.store(cur_unused, Ordering::SeqCst);
         stream1_chan1.m1ar.write(|w| unsafe { w.bits(new_target) });
     } else {
-        // #[cfg(feature = "rttdebug")]
-        // rprintln!("mem0 idle: {} unused: {} ", cur_mem0, cur_unused);
         //memory0 is idle, so swap an unused buffer into DMA_S2M0AR
         let cur_mem0 = MEM0_BUF_IDX.load(Ordering::SeqCst);
         UNUSED_BUF_IDX.store(cur_mem0, Ordering::SeqCst);
@@ -501,7 +498,8 @@ fn swap_idle_and_unused_buf(stream1_chan1: &pac::dma2::ST) {
     }
 }
 
-pub static DCMI_CAP_COUNT: AtomicUsize = AtomicUsize::new(0);
+/// Stores the number of DCMI transfer completed interrupts
+static DCMI_CAP_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 /// Call this from DCMI interrupt
 pub fn dcmi_irqhandler() {
