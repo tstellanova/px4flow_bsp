@@ -9,35 +9,30 @@ use core::ops::Deref;
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
 
-//TODO make frame constants configurable?
-
-//These are mt9v034 constants, not generally applicable to all cameras
-const MAX_FRAME_WIDTH: usize = 752;
-const MAX_FRAME_HEIGHT: usize = 480;
-const BINNING_FACTOR: usize = 4;
-const FULL_FRAME_WIDTH: usize = MAX_FRAME_WIDTH / BINNING_FACTOR; // 188
-const FULL_FRAME_HEIGHT: usize = MAX_FRAME_HEIGHT / BINNING_FACTOR; // 120
-const FULL_FRAME_PIXEL_COUNT: usize = 4096; //TODO: FULL_FRAME_WIDTH * FULL_FRAME_HEIGHT; //22560
+//TODO make frame constants configurable? This is limited to 64x64
+const FULL_FRAME_PIXEL_COUNT: usize = 4096;
 
 pub const FLOW_IMG_HEIGHT: usize = 64;
 pub const FLOW_IMG_WIDTH: usize = 64;
-pub const FLOW_FRAME_PIXEL_COUNT: usize = FLOW_IMG_HEIGHT * FLOW_IMG_WIDTH;
-pub const FRAME_XFER_WORD_COUNT: u32 = (FLOW_FRAME_PIXEL_COUNT / 4) as u32;
 
+//TODO this assumes 8 bpp
 pub const IMG_FRAME_BUF_LEN: usize = FULL_FRAME_PIXEL_COUNT;
-/// Buffer to store image data; note this is larger than the actual size read
+
+/// Buffer to store image data
 pub type ImageFrameBuf = [u8; IMG_FRAME_BUF_LEN];
 
+/// Wrapper for reading DCMI
 pub struct DcmiWrapper {
-    frame_width: usize,
     frame_height: usize,
+    frame_width: usize,
+    pixel_count: usize,
     dcmi: pac::DCMI,
     dma2: pac::DMA2,
 }
 
-static mut IMG_BUF0: ImageFrameBuf = [0u8; FULL_FRAME_PIXEL_COUNT];
-static mut IMG_BUF1: ImageFrameBuf = [0u8; FULL_FRAME_PIXEL_COUNT];
-static mut IMG_BUF2: ImageFrameBuf = [0u8; FULL_FRAME_PIXEL_COUNT];
+static mut IMG_BUF0: ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
+static mut IMG_BUF1: ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
+static mut IMG_BUF2: ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
 
 static BUF0_ADDR: AtomicUsize = AtomicUsize::new(0);
 static BUF1_ADDR: AtomicUsize = AtomicUsize::new(0);
@@ -54,11 +49,19 @@ static MEM0_BUF_IDX: AtomicUsize = AtomicUsize::new(0);
 /// the buffer index of the buffer currently selected for M1AR
 static MEM1_BUF_IDX: AtomicUsize = AtomicUsize::new(1);
 
-impl DcmiWrapper {
-    pub fn new(dcmi: pac::DCMI, dma2: pac::DMA2) -> Self {
+impl DcmiWrapper
+{
+    pub fn default(dcmi: pac::DCMI, dma2: pac::DMA2) -> Self {
+        Self::new(dcmi, dma2, FLOW_IMG_HEIGHT, FLOW_IMG_WIDTH)
+    }
+
+    pub fn new(dcmi: pac::DCMI, dma2: pac::DMA2, frame_height: usize, frame_width: usize) -> Self {
+        let pixel_count = frame_height * frame_width;
+
         Self {
-            frame_width: FLOW_IMG_WIDTH,
-            frame_height: FLOW_IMG_HEIGHT,
+            frame_height,
+            frame_width,
+            pixel_count,
             dcmi,
             dma2,
         }
@@ -66,11 +69,12 @@ impl DcmiWrapper {
 
     /// Setup DCMI and associated DMA
     pub fn setup(&mut self) {
+
         #[cfg(feature = "rttdebug")]
         rprintln!(
             "dcmi::setup start: {}, {}",
-            FULL_FRAME_PIXEL_COUNT,
-            FRAME_XFER_WORD_COUNT
+            self.pixel_count,
+            self.pixel_count / 4
         );
 
         //NOTE(unsafe) This executes only once during initialization
@@ -199,7 +203,8 @@ impl DcmiWrapper {
         #[cfg(feature = "rttdebug")]
         rprintln!("00 dma2_ndtr: {:#b}", stream1_chan1.ndtr.read().bits());
         // Set number of items to transfer: number of 32 bit words
-        stream1_chan1.ndtr.write(|w| w.bits(FRAME_XFER_WORD_COUNT));
+        let word_count = (self.pixel_count / 4) as u32;
+        stream1_chan1.ndtr.write(|w| w.bits(word_count));
 
         #[cfg(feature = "rttdebug")]
         rprintln!("post-init dma2 CR = {}, NDTR = {}, PAR = {}, M0AR = {}, M1AR = {}, FCR = {}",
@@ -211,8 +216,7 @@ impl DcmiWrapper {
             stream1_chan1.fcr.read().bits(),
         );
 
-        //exp CR = 33969408, NDTR = 1024, PAR = 1342505000, M0AR = 0, M1AR = 536905744, FCR = 35
-        //got CR = 33969408, NDTR = 1024, PAR = 1342505000, M0AR = 0, M1AR = 536894552, FCR = 35
+        //sample: CR = 33969408, NDTR = 1024, PAR = 1342505000, M0AR = 0, M1AR = 536894552, FCR = 35
     }
 
     /// Configure the DCMI peripheral for continuous capture

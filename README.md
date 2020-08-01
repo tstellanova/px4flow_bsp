@@ -44,7 +44,9 @@ Work in progress
 - [x] Initial setup of DCMI peripheral
 - [x] Initial setup of DMA2 
 - [x] Mostly working DCMI->DMA2-> image buffer pipeline
-- [ ] Allow configurable / full-frame image buffers (currently limited to 64x64)
+- [ ] Support configurable / full-frame image buffers (currently limited to 64x64)
+- [ ] Support use of full 10 bpp grayscale resolution of MT9V034
+- [ ] Support use of 120x120 flow frame (bin 4 of 480 height)
 
 ## Notes
 - The only supported mode for debugging is RTT with the `rttdebug` feature. This is because 

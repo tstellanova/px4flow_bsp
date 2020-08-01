@@ -22,6 +22,7 @@ const GYRO_REPORTING_RATE_HZ: u16 = 95;
 const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 
 use mt9v034_i2c::PixelTestPattern;
+
 use px4flow_bsp::dcmi::{DcmiWrapper, ImageFrameBuf, IMG_FRAME_BUF_LEN};
 use px4flow_bsp::{board::Board, dcmi};
 
@@ -50,7 +51,7 @@ fn main() -> ! {
     rtt_init_print!(NoBlockTrim);
     rprintln!("-- > MAIN --");
 
-    let mut board = Board::new();
+    let mut board = Board::default();
 
     let loop_interval = GYRO_REPORTING_INTERVAL_MS as u8;
     rprintln!("loop_interval: {}", loop_interval);
@@ -88,15 +89,17 @@ fn main() -> ! {
                         unsafe { &mut FAST_IMG1 }
                     };
                     dcmi_wrap.copy_image_buf(dst);
-                    flow_img_idx = (flow_img_idx + 1) % 2;
 
                     // this simply dumps all of the received pixel data --
                     // in a real application we'd do something more substantial with the data
                     let _ = board.activity_led.toggle();
+                    rprintln!("--- buf {} ---", flow_img_idx);
                     for i in 0..4096 {
                         rprint!("{:x},", dst[i]);
                     }
-                    rprintln!("---");
+                    rprintln!("\n---");
+                    flow_img_idx = (flow_img_idx + 1) % 2;
+
                 }
             }
         }

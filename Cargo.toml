@@ -35,7 +35,6 @@ mt9v034-i2c = {path="../mt9v034-i2c", features=["rttdebug"], version="0.1.3"}
 # Serial EEPROM
 eeprom24x = "0.3.0"
 
-
 [dev-dependencies]
 cortex-m-rt = "0.6.12"
 panic-rtt-core = "0.1.1"
