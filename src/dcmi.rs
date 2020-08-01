@@ -37,9 +37,9 @@ pub struct DcmiWrapper {
     dma2: pac::DMA2,
 }
 
-static mut IMG_BUF0: ImageFrameBuf = [0u8; FULL_FRAME_PIXEL_COUNT];
-static mut IMG_BUF1: ImageFrameBuf = [0u8; FULL_FRAME_PIXEL_COUNT];
-static mut IMG_BUF2: ImageFrameBuf = [0u8; FULL_FRAME_PIXEL_COUNT];
+static mut IMG_BUF0: ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
+static mut IMG_BUF1: ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
+static mut IMG_BUF2: ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
 
 static BUF0_ADDR: AtomicUsize = AtomicUsize::new(0);
 static BUF1_ADDR: AtomicUsize = AtomicUsize::new(0);
@@ -210,7 +210,7 @@ impl DcmiWrapper
         #[cfg(feature = "rttdebug")]
         rprintln!("00 dma2_ndtr: {:#b}", stream1_chan1.ndtr.read().bits());
         // Set number of items to transfer: number of 32 bit words
-        let word_count = (self.pixel_count / 4) as u32;// was: FRAME_XFER_WORD_COUNT
+        let word_count = (self.pixel_count / 4) as u32;
         stream1_chan1.ndtr.write(|w| w.bits(word_count));
 
         #[cfg(feature = "rttdebug")]
