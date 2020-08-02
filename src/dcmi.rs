@@ -35,10 +35,6 @@ static mut IMG_BUF0: ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
 static mut IMG_BUF1: ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
 static mut IMG_BUF2: ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
 
-static BUF0_ADDR: AtomicUsize = AtomicUsize::new(0);
-static BUF1_ADDR: AtomicUsize = AtomicUsize::new(0);
-static BUF2_ADDR: AtomicUsize = AtomicUsize::new(0);
-
 static mut BUF0_PTR: *const ImageFrameBuf = core::ptr::null();
 static mut BUF1_PTR: *const ImageFrameBuf = core::ptr::null();
 static mut BUF2_PTR: *const ImageFrameBuf = core::ptr::null();
@@ -453,31 +449,31 @@ fn init_dma_buffers(stream1_chan1: &pac::dma2::ST) {
     MEM1_BUF_IDX.store(1, Ordering::SeqCst);
     UNUSED_BUF_IDX.store(2, Ordering::SeqCst);
 
-    let buf0_addr = (&unsafe { IMG_BUF0 } as *const ImageFrameBuf);
-    let buf1_addr = (&unsafe { IMG_BUF1 } as *const ImageFrameBuf);
-    let buf2_addr = (&unsafe { IMG_BUF2 } as *const ImageFrameBuf);
-    #[cfg(feature = "rttdebug")]
-    rprintln!(
-        "buf0 {:x} buf1 {:x} buf2 {:x}",
-        buf0_addr as usize,
-        buf1_addr as usize,
-        buf2_addr as usize
-    );
     unsafe {
+        let buf0_addr = (&IMG_BUF0 as *const ImageFrameBuf);
+        let buf1_addr = (&IMG_BUF1 as *const ImageFrameBuf);
+        let buf2_addr = (&IMG_BUF2 as *const ImageFrameBuf);
+        #[cfg(feature = "rttdebug")]
+        rprintln!(
+            "buf0 {:x} buf1 {:x} buf2 {:x}",
+            buf0_addr as usize,
+            buf1_addr as usize,
+            buf2_addr as usize
+        );
+
+        //store these static addresses once and then use them repeatedly
         BUF0_PTR = buf0_addr;
         BUF1_PTR = buf1_addr;
         BUF2_PTR = buf2_addr;
-    }
-    BUF0_ADDR.store(buf0_addr as usize, Ordering::SeqCst);
-    BUF1_ADDR.store(buf1_addr as usize, Ordering::SeqCst);
-    BUF2_ADDR.store(buf2_addr as usize, Ordering::SeqCst);
 
-    stream1_chan1
-        .m0ar
-        .write(|w| unsafe { w.bits(buf0_addr as u32) });
-    stream1_chan1
-        .m1ar
-        .write(|w| unsafe { w.bits(buf1_addr as u32) });
+        //set the initial buffers to be used by DMA
+        stream1_chan1
+            .m0ar
+            .write(|w| w.bits(buf0_addr as u32));
+        stream1_chan1
+            .m1ar
+            .write(|w| w.bits(buf1_addr as u32));
+    }
 }
 
 /// Update "next" DMA buffer selection to the unused buffer:
@@ -490,10 +486,10 @@ fn swap_idle_and_unused_buf(stream1_chan1: &pac::dma2::ST) {
     // let m1ar = stream1_chan1.m1ar.read().bits();
 
     let cur_unused = UNUSED_BUF_IDX.load(Ordering::SeqCst);
-    let new_target = match cur_unused {
-        0 => BUF0_ADDR.load(Ordering::SeqCst) as u32,
-        1 => BUF1_ADDR.load(Ordering::SeqCst) as u32,
-        2 => BUF2_ADDR.load(Ordering::SeqCst) as u32,
+    let new_target =  match cur_unused {
+        0 => (unsafe {BUF0_PTR}) as u32,
+        1 => (unsafe { BUF1_PTR }) as u32,
+        2 => (unsafe { BUF2_PTR }) as u32,
         _ => panic!("invalid cur_unused"),
     };
 
