@@ -26,6 +26,7 @@ pub struct DcmiWrapper {
     frame_height: usize,
     frame_width: usize,
     pixel_count: usize,
+    bits_per_pixel: u8,
     dcmi: pac::DCMI,
     dma2: pac::DMA2,
 }
@@ -52,16 +53,18 @@ static MEM1_BUF_IDX: AtomicUsize = AtomicUsize::new(1);
 impl DcmiWrapper
 {
     pub fn default(dcmi: pac::DCMI, dma2: pac::DMA2) -> Self {
-        Self::new(dcmi, dma2, FLOW_IMG_HEIGHT, FLOW_IMG_WIDTH)
+        Self::new(dcmi, dma2, FLOW_IMG_HEIGHT, FLOW_IMG_WIDTH, 8)
     }
 
-    pub fn new(dcmi: pac::DCMI, dma2: pac::DMA2, frame_height: usize, frame_width: usize) -> Self {
+    pub fn new(dcmi: pac::DCMI, dma2: pac::DMA2, frame_height: usize, frame_width: usize,
+               bits_per_pixel: u8) -> Self {
         let pixel_count = frame_height * frame_width;
 
         Self {
             frame_height,
             frame_width,
             pixel_count,
+            bits_per_pixel,
             dcmi,
             dma2,
         }
@@ -92,30 +95,30 @@ impl DcmiWrapper
         unsafe {
             self.enable_dcmi_and_dma();
             #[cfg(feature = "rttdebug")]
-            {
-                rprintln!("dcmi cr: 0x{:x}", self.dcmi.cr.read().bits());
-            }
+            rprintln!("dcmi cr: 0x{:x}", self.dcmi.cr.read().bits());
         }
     }
 
-    unsafe fn deinit_dma2(&mut self) {
+    fn deinit_dma2(&mut self) {
         self.toggle_dma2_stream1(false);
         let mut stream1_chan1 = &self.dma2.st[1];
 
-        stream1_chan1.cr.write(|w| w.bits(0));
-        stream1_chan1.ndtr.write(|w| w.bits(0));
-        stream1_chan1.par.write(|w| w.bits(0));
-        stream1_chan1.m0ar.write(|w| w.bits(0));
-        stream1_chan1.m1ar.write(|w| w.bits(0));
-        //fifo control
-        stream1_chan1.fcr.write(|w| w.bits(0x00000021)); //TODO verify value
+        unsafe {
+            stream1_chan1.cr.write(|w| w.bits(0));
+            stream1_chan1.ndtr.write(|w| w.bits(0));
+            stream1_chan1.par.write(|w| w.bits(0));
+            stream1_chan1.m0ar.write(|w| w.bits(0));
+            stream1_chan1.m1ar.write(|w| w.bits(0));
+            //fifo control
+            stream1_chan1.fcr.write(|w| w.bits(0x00000021)); //TODO verify value
+        };
 
         //clear all interrupt enable flags
         self.clear_dma2_interrupts();
     }
 
     /// Clear all pending interrupts from DMA2 stream 1
-    unsafe fn clear_dma2_interrupts(&mut self) {
+    fn clear_dma2_interrupts(&mut self) {
         // Setting these bits clears the corresponding TCIFx flag in the DMA_LISR register
         self.dma2.lifcr.write(|w| {
             w.cfeif1()
@@ -132,7 +135,7 @@ impl DcmiWrapper
     }
 
     /// Configure DMA2 for DCMI peripheral -> memory transfer
-    unsafe fn init_dma2(&mut self) {
+    fn init_dma2(&mut self) {
         //configure DMA2, stream 1, channel 1 for DCMI peripheral -> memory
         let mut stream1_chan1 = &self.dma2.st[1];
 
@@ -151,7 +154,8 @@ impl DcmiWrapper
         });
 
         init_dma_buffers(stream1_chan1);
-        stream1_chan1.par.write(|w| w.bits(Self::DCMI_PERIPH_ADDR));
+        stream1_chan1.par.write(|w|
+            unsafe { w.bits(Self::DCMI_PERIPH_ADDR) });
 
         // init dma2 stream1
         stream1_chan1.cr.modify(|_, w| {
@@ -203,8 +207,9 @@ impl DcmiWrapper
         #[cfg(feature = "rttdebug")]
         rprintln!("00 dma2_ndtr: {:#b}", stream1_chan1.ndtr.read().bits());
         // Set number of items to transfer: number of 32 bit words
-        let word_count = (self.pixel_count / 4) as u32;
-        stream1_chan1.ndtr.write(|w| w.bits(word_count));
+        let bytes_per_pixel = Self::bytes_per_pixel(self.bits_per_pixel);
+        let word_count = ((self.pixel_count * bytes_per_pixel) / 4) as u32;
+        stream1_chan1.ndtr.write(|w| unsafe { w.bits(word_count) });
 
         #[cfg(feature = "rttdebug")]
         rprintln!("post-init dma2 CR = {}, NDTR = {}, PAR = {}, M0AR = {}, M1AR = {}, FCR = {}",
@@ -219,13 +224,25 @@ impl DcmiWrapper
         //sample: CR = 33969408, NDTR = 1024, PAR = 1342505000, M0AR = 0, M1AR = 536894552, FCR = 35
     }
 
+    /// calculate the number of bytes needed to represent a single pixel
+    fn bytes_per_pixel(bits_per_pixel: u8) -> usize {
+        if bits_per_pixel > 8 {
+            if bits_per_pixel > 16 {
+                if bits_per_pixel > 24 { 4 }
+                else { 3 }
+            }
+            else { 2 }
+        }
+        else { 1 }
+    }
+
     /// Configure the DCMI peripheral for continuous capture
-    unsafe fn init_dcmi(&mut self) {
+    fn init_dcmi(&mut self) {
         #[cfg(feature = "rttdebug")]
         rprintln!("04 dcmi_cr: {:#b}", self.dcmi.cr.read().bits());
 
         //basic DCMI configuration
-        self.dcmi.cr.modify(|_, w| {
+        self.dcmi.cr.modify(|_, w| unsafe {
             w.cm() // capture mode: continuous
                 .clear_bit()
                 .ess() // synchro mode: hardware
@@ -247,7 +264,7 @@ impl DcmiWrapper
     }
 
     /// Enable DMA2 and DCMI after setup
-    unsafe fn enable_dcmi_and_dma(&mut self) {
+    fn enable_dcmi_and_dma(&mut self) {
         self.toggle_dma2_stream1(true);
         self.toggle_dcmi(true);
         self.enable_dma_interrupts();
@@ -267,7 +284,7 @@ impl DcmiWrapper
         }
     }
 
-    unsafe fn toggle_dma2_stream1(&mut self, enable: bool) {
+    fn toggle_dma2_stream1(&mut self, enable: bool) {
         let mut stream1_chan1 = &self.dma2.st[1];
         #[cfg(feature = "rttdebug")]
         rprintln!("08 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
@@ -282,7 +299,7 @@ impl DcmiWrapper
         rprintln!("09 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
     }
 
-    unsafe fn toggle_dcmi(&mut self, enable: bool) {
+    fn toggle_dcmi(&mut self, enable: bool) {
         #[cfg(feature = "rttdebug")]
         rprintln!("toggle dcmi_cr: {:#b}", self.dcmi.cr.read().bits());
 
@@ -302,11 +319,11 @@ impl DcmiWrapper
         rprintln!("toggle dcmi_cr: {:#b}", self.dcmi.cr.read().bits());
     }
 
-    unsafe fn enable_dcmi_interrupts(&mut self) {
+    fn enable_dcmi_interrupts(&mut self) {
         cortex_m::interrupt::free(|_| {
             // enable interrupts DCMI capture completion
             pac::NVIC::unpend(pac::Interrupt::DCMI);
-            pac::NVIC::unmask(pac::Interrupt::DCMI);
+            unsafe { pac::NVIC::unmask(pac::Interrupt::DCMI); }
         });
 
         self.dcmi.ier.write(|w| {
@@ -320,11 +337,11 @@ impl DcmiWrapper
         });
     }
 
-    unsafe fn enable_dma_interrupts(&mut self) {
+    fn enable_dma_interrupts(&mut self) {
         cortex_m::interrupt::free(|_| {
             // enable interrupts for DMA2 transfer completion
             pac::NVIC::unpend(pac::Interrupt::DMA2_STREAM1);
-            pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1);
+            unsafe { pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1); }
         });
 
         let mut stream1_chan1 = &self.dma2.st[1];

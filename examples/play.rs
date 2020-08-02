@@ -21,9 +21,9 @@ use embedded_hal::digital::v2::ToggleableOutputPin;
 const GYRO_REPORTING_RATE_HZ: u16 = 95;
 const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 
-use mt9v034_i2c::PixelTestPattern;
+// use mt9v034_i2c::PixelTestPattern;
 
-use px4flow_bsp::dcmi::{DcmiWrapper, ImageFrameBuf, IMG_FRAME_BUF_LEN};
+use px4flow_bsp::dcmi::{ImageFrameBuf, IMG_FRAME_BUF_LEN};
 use px4flow_bsp::{board::Board, dcmi};
 
 /// should be called whenever DMA2 completes a transfer
@@ -62,7 +62,7 @@ fn main() -> ! {
 
     // This is how we can enable the grayscale test pattern
     // let _ = board.camera_config.as_mut().unwrap().
-    //     enable_pixel_test_pattern(true, PixelTestPattern::DiagonalShade);
+    //     enable_pixel_test_pattern(true, PixelTestPattern::VerticalShade);
 
     if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
         dcmi_wrap.enable_capture();
@@ -83,21 +83,24 @@ fn main() -> ! {
                 let avail_frames = dcmi_wrap.available_frame_count();
                 if avail_frames > 0 {
                     //rprintln!("avail: {}", avail_frames);
-                    let dst = if flow_img_idx == 0 {
-                        unsafe { &mut FAST_IMG0 }
-                    } else {
-                        unsafe { &mut FAST_IMG1 }
-                    };
+                    let dst =
+                        if flow_img_idx == 0 {
+                            unsafe { &mut FAST_IMG0 }
+                        } else {
+                            unsafe { &mut FAST_IMG1 }
+                        };
                     dcmi_wrap.copy_image_buf(dst);
 
                     // this simply dumps all of the received pixel data --
                     // in a real application we'd do something more substantial with the data
                     let _ = board.activity_led.toggle();
-                    rprintln!("--- buf {} ---", flow_img_idx);
-                    for i in 0..4096 {
-                        rprint!("{:x},", dst[i]);
-                    }
-                    rprintln!("\n---");
+                    rprintln!("{:x?}", &dst[0..32]);
+                    //
+                    // rprintln!("--- buf {} ---", flow_img_idx);
+                    // for i in 0..4096 {
+                    //     rprint!("{:x},", dst[i]);
+                    // }
+                    // rprintln!("\n---");
                     flow_img_idx = (flow_img_idx + 1) % 2;
 
                 }
