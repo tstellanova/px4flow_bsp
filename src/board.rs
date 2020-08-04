@@ -4,7 +4,7 @@ use embedded_hal::blocking::delay::DelayMs;
 use eeprom24x::Eeprom24x;
 use embedded_hal::digital::v1_compat::OldOutputPin;
 use l3gd20::L3gd20;
-use mt9v034_i2c::{Mt9v034, ParamContext, Binning};
+use mt9v034_i2c::{Binning, Mt9v034, ParamContext};
 
 use core::sync::atomic::{AtomicPtr, Ordering};
 use cortex_m::singleton;
@@ -107,7 +107,6 @@ impl Board<'_> {
         let mut dcmi_wrap = DcmiWrapper::default(dcmi, dma2);
         dcmi_wrap.setup();
 
-
         #[cfg(feature = "breakout")]
         let base_i2c_address = mt9v034_i2c::ARDUCAM_BREAKOUT_ADDRESS;
         #[cfg(not(feature = "breakout"))]
@@ -116,26 +115,31 @@ impl Board<'_> {
             Mt9v034::new(i2c2_bus_mgr.acquire(), base_i2c_address);
 
         // configure image sensor with two distinct contexts:
-        // - Context A: 256x256 window, binning 4 -> 64x64 output images (flow)
-        // - Context B: 752x480 window, binning 2 -> 376x240 output images (video)
-        cam_config.setup_with_dimensions(
-            WINDOW_W_A, WINDOW_H_A,
-            BINNING_A, BINNING_A,
-            WINDOW_W_B, WINDOW_H_B,
-            BINNING_B, BINNING_B,
-            ParamContext::ContextA)
+        // - Context A: 256x256 window, binning 4 -> 64x64 output images (flow-64)
+        // - Context B: 480x480 window, binning 4 -> 120x120 output images (flow-120)
+        cam_config
+            .setup_with_dimensions(
+                WINDOW_W_A,
+                WINDOW_H_A,
+                BINNING_A,
+                BINNING_A,
+                WINDOW_W_B,
+                WINDOW_H_B,
+                BINNING_B,
+                BINNING_B,
+                ParamContext::ContextA,
+            )
             .expect("could not configure MT9V034");
 
-
-        const BINNING_B: Binning = Binning::Two;
+        const BINNING_B: Binning = Binning::Four;
         const BINNING_A: Binning = Binning::Four;
-        const WINDOW_W_B: u16 = 752;
+        const WINDOW_W_B: u16 = 480;
         const WINDOW_H_B: u16 = 480;
         const WINDOW_W_A: u16 = 256;
         const WINDOW_H_A: u16 = 256;
 
         // Note that we do not call dcmi_wrap.enable_capture() here --
-        // instead we allow our consumer to do that if desired.
+        // instead we allow the board user to do that if desired.
 
         Self {
             activity_led: raw_user_leds.0,

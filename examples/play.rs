@@ -23,7 +23,8 @@ const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 
 // use mt9v034_i2c::PixelTestPattern;
 
-use px4flow_bsp::dcmi::{ImageFrameBuf, IMG_FRAME_BUF_LEN};
+use base64::display::Base64Display;
+use px4flow_bsp::dcmi::{ImageFrameBuf, SQ_FRAME_BUF_LEN};
 use px4flow_bsp::{board::Board, dcmi};
 
 /// should be called whenever DMA2 completes a transfer
@@ -40,15 +41,15 @@ fn DCMI() {
     dcmi::dcmi_irqhandler();
 }
 
-/// Setup close-coupled RAM buffers for faster image manipulation
+/// Setup core-coupled RAM buffers for faster image manipulation
 #[link_section = ".ccmram.IMG_BUFS"]
-static mut FAST_IMG0: ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
+static mut FAST_IMG0: ImageFrameBuf = [0u8; SQ_FRAME_BUF_LEN];
 #[link_section = ".ccmram.IMG_BUFS"]
-static mut FAST_IMG1: ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
+static mut FAST_IMG1: ImageFrameBuf = [0u8; SQ_FRAME_BUF_LEN];
 
 #[entry]
 fn main() -> ! {
-    rtt_init_print!(NoBlockTrim);
+    rtt_init_print!(BlockIfFull);
     rprintln!("-- > MAIN --");
 
     let mut board = Board::default();
@@ -62,12 +63,12 @@ fn main() -> ! {
 
     // This is how we can enable the grayscale test pattern
     // let _ = board.camera_config.as_mut().unwrap().
-    //     enable_pixel_test_pattern(true, PixelTestPattern::VerticalShade);
+    //     enable_pixel_test_pattern(true, PixelTestPattern::DiagonalShade);
 
     if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
         dcmi_wrap.enable_capture();
     }
-
+    let mut img_count: u32 = 0;
     let mut flow_img_idx = 0;
     loop {
         for _ in 0..10 {
@@ -83,29 +84,42 @@ fn main() -> ! {
                 let avail_frames = dcmi_wrap.available_frame_count();
                 if avail_frames > 0 {
                     //rprintln!("avail: {}", avail_frames);
-                    let dst =
-                        if flow_img_idx == 0 {
-                            unsafe { &mut FAST_IMG0 }
-                        } else {
-                            unsafe { &mut FAST_IMG1 }
-                        };
-                    dcmi_wrap.copy_image_buf(dst);
-
-                    // this simply dumps all of the received pixel data --
-                    // in a real application we'd do something more substantial with the data
-                    let _ = board.activity_led.toggle();
-                    rprintln!("{:x?}", &dst[0..32]);
-                    //
-                    // rprintln!("--- buf {} ---", flow_img_idx);
-                    // for i in 0..4096 {
-                    //     rprint!("{:x},", dst[i]);
-                    // }
-                    // rprintln!("\n---");
+                    let dst = if flow_img_idx == 0 {
+                        unsafe { &mut FAST_IMG0 }
+                    } else {
+                        unsafe { &mut FAST_IMG1 }
+                    };
                     flow_img_idx = (flow_img_idx + 1) % 2;
+                    dcmi_wrap.copy_image_buf(dst);
+                    // in this example we dump pixel data as base64 encoded
+                    // raw 8-bit values to the rtt console
+                    // in a real application we'd do something more substantial with the data
+                    dump_pixels(img_count, dst);
 
+                    let _ = board.activity_led.toggle();
+                    img_count += 1;
                 }
             }
         }
         let _ = board.comms_led.toggle();
+    }
+}
+
+/// output image data as 8-bit raw pixels in base64 encoded format, to RTT
+fn dump_pixels(image_count: u32, buf: &[u8]) {
+    rprintln!("\n--- {}", image_count);
+
+    //process input chunks that are multiples of 12 bytes (for base64 continuity)
+    const CHUNK_SIZE: usize = 24;
+    let total_len = buf.len();
+    let mut read_idx = 0;
+    while read_idx < total_len {
+        let max_idx = total_len.min(read_idx + CHUNK_SIZE);
+        let wrapper = Base64Display::with_config(
+            &buf[read_idx..max_idx],
+            base64::STANDARD,
+        );
+        rprint!("{}", wrapper);
+        read_idx += CHUNK_SIZE;
     }
 }

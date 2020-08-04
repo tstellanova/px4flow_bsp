@@ -4,36 +4,36 @@ use stm32f4xx_hal as p_hal;
 use pac::{DCMI, RCC};
 
 use core::sync::atomic::{AtomicUsize, Ordering};
+use cortex_m::singleton;
 
 use core::ops::Deref;
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
 
-//TODO make frame constants configurable? This is limited to 64x64
-const FULL_FRAME_PIXEL_COUNT: usize = 4096;
-
-pub const FLOW_IMG_HEIGHT: usize = 64;
-pub const FLOW_IMG_WIDTH: usize = 64;
+pub const SQ_DIM_64: usize = 64;
+pub const SQ_DIM_120: usize = 120;
+pub const SQ_64_PIXEL_COUNT: usize = SQ_DIM_64 * SQ_DIM_64;
+pub const SQ_120_PIXEL_COUNT: usize = SQ_DIM_120 * SQ_DIM_120;
 
 //TODO this assumes 8 bpp
-pub const IMG_FRAME_BUF_LEN: usize = FULL_FRAME_PIXEL_COUNT;
+pub const SQ_FRAME_BUF_LEN: usize = SQ_120_PIXEL_COUNT;
 
 /// Buffer to store image data
-pub type ImageFrameBuf = [u8; IMG_FRAME_BUF_LEN];
+pub type ImageFrameBuf = [u8; SQ_FRAME_BUF_LEN];
 
 /// Wrapper for reading DCMI
 pub struct DcmiWrapper {
     frame_height: usize,
     frame_width: usize,
     pixel_count: usize,
-    bits_per_pixel: u8,
+    bits_per_pixel: u8, //TODO convert to enum
     dcmi: pac::DCMI,
     dma2: pac::DMA2,
 }
 
-static mut IMG_BUF0: ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
-static mut IMG_BUF1: ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
-static mut IMG_BUF2: ImageFrameBuf = [0u8; IMG_FRAME_BUF_LEN];
+static mut IMG_BUF0: ImageFrameBuf = [0u8; SQ_FRAME_BUF_LEN];
+static mut IMG_BUF1: ImageFrameBuf = [0u8; SQ_FRAME_BUF_LEN];
+static mut IMG_BUF2: ImageFrameBuf = [0u8; SQ_FRAME_BUF_LEN];
 
 static mut BUF0_PTR: *const ImageFrameBuf = core::ptr::null();
 static mut BUF1_PTR: *const ImageFrameBuf = core::ptr::null();
@@ -46,14 +46,21 @@ static MEM0_BUF_IDX: AtomicUsize = AtomicUsize::new(0);
 /// the buffer index of the buffer currently selected for M1AR
 static MEM1_BUF_IDX: AtomicUsize = AtomicUsize::new(1);
 
-impl DcmiWrapper
-{
+impl DcmiWrapper {
+    /// New wrapper ready for DCMI with a 64x64, 8 bits per pixel capture
     pub fn default(dcmi: pac::DCMI, dma2: pac::DMA2) -> Self {
-        Self::new(dcmi, dma2, FLOW_IMG_HEIGHT, FLOW_IMG_WIDTH, 8)
+        //Self::new(dcmi, dma2, SQ_DIM_64, SQ_DIM_64, 8)
+        Self::new(dcmi, dma2, SQ_DIM_120, SQ_DIM_120, 8)
     }
 
-    pub fn new(dcmi: pac::DCMI, dma2: pac::DMA2, frame_height: usize, frame_width: usize,
-               bits_per_pixel: u8) -> Self {
+    ///
+    pub fn new(
+        dcmi: pac::DCMI,
+        dma2: pac::DMA2,
+        frame_height: usize,
+        frame_width: usize,
+        bits_per_pixel: u8,
+    ) -> Self {
         let pixel_count = frame_height * frame_width;
 
         Self {
@@ -68,12 +75,11 @@ impl DcmiWrapper
 
     /// Setup DCMI and associated DMA
     pub fn setup(&mut self) {
-
         #[cfg(feature = "rttdebug")]
         rprintln!(
             "dcmi::setup start: {}, {}",
             self.pixel_count,
-            self.pixel_count / 4
+            self.bits_per_pixel
         );
 
         //NOTE(unsafe) This executes only once during initialization
@@ -87,6 +93,7 @@ impl DcmiWrapper
         rprintln!("dcmi::setup done");
     }
 
+    /// Call this after `setup` to begin capture and start interrupts
     pub fn enable_capture(&mut self) {
         unsafe {
             self.enable_dcmi_and_dma();
@@ -135,8 +142,8 @@ impl DcmiWrapper
         //configure DMA2, stream 1, channel 1 for DCMI peripheral -> memory
         let mut stream1_chan1 = &self.dma2.st[1];
 
-        #[cfg(feature = "rttdebug")]
-        rprintln!("00 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
+        // #[cfg(feature = "rttdebug")]
+        // rprintln!("00 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
 
         //configure double-buffer mode
         stream1_chan1.cr.modify(|_, w| {
@@ -150,8 +157,9 @@ impl DcmiWrapper
         });
 
         init_dma_buffers(stream1_chan1);
-        stream1_chan1.par.write(|w|
-            unsafe { w.bits(Self::DCMI_PERIPH_ADDR) });
+        stream1_chan1
+            .par
+            .write(|w| unsafe { w.bits(Self::DCMI_PERIPH_ADDR) });
 
         // init dma2 stream1
         stream1_chan1.cr.modify(|_, w| {
@@ -200,8 +208,8 @@ impl DcmiWrapper
                 .full()
         });
 
-        #[cfg(feature = "rttdebug")]
-        rprintln!("00 dma2_ndtr: {:#b}", stream1_chan1.ndtr.read().bits());
+        // #[cfg(feature = "rttdebug")]
+        // rprintln!("00 dma2_ndtr: {:#b}", stream1_chan1.ndtr.read().bits());
         // Set number of items to transfer: number of 32 bit words
         let bytes_per_pixel = Self::bytes_per_pixel(self.bits_per_pixel);
         let word_count = ((self.pixel_count * bytes_per_pixel) / 4) as u32;
@@ -224,20 +232,26 @@ impl DcmiWrapper
     fn bytes_per_pixel(bits_per_pixel: u8) -> usize {
         if bits_per_pixel > 8 {
             if bits_per_pixel > 16 {
-                if bits_per_pixel > 24 { 4 }
-                else { 3 }
+                if bits_per_pixel > 24 {
+                    4
+                } else {
+                    3
+                }
+            } else {
+                2
             }
-            else { 2 }
+        } else {
+            1
         }
-        else { 1 }
     }
 
     /// Configure the DCMI peripheral for continuous capture
     fn init_dcmi(&mut self) {
-        #[cfg(feature = "rttdebug")]
-        rprintln!("04 dcmi_cr: {:#b}", self.dcmi.cr.read().bits());
+        // #[cfg(feature = "rttdebug")]
+        // rprintln!("04 dcmi_cr: {:#b}", self.dcmi.cr.read().bits());
 
         //basic DCMI configuration
+        //TODO use self.bits_per_pixel to configure EDM
         self.dcmi.cr.modify(|_, w| unsafe {
             w.cm() // capture mode: continuous
                 .clear_bit()
@@ -280,6 +294,7 @@ impl DcmiWrapper
         }
     }
 
+    /// Enable or disable the DMA2 stream
     fn toggle_dma2_stream1(&mut self, enable: bool) {
         let mut stream1_chan1 = &self.dma2.st[1];
         #[cfg(feature = "rttdebug")]
@@ -295,6 +310,7 @@ impl DcmiWrapper
         rprintln!("09 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
     }
 
+    /// Enable or disable the DCMI interface
     fn toggle_dcmi(&mut self, enable: bool) {
         #[cfg(feature = "rttdebug")]
         rprintln!("toggle dcmi_cr: {:#b}", self.dcmi.cr.read().bits());
@@ -315,11 +331,14 @@ impl DcmiWrapper
         rprintln!("toggle dcmi_cr: {:#b}", self.dcmi.cr.read().bits());
     }
 
+    /// Enable `DCMI` interrupts
     fn enable_dcmi_interrupts(&mut self) {
         cortex_m::interrupt::free(|_| {
             // enable interrupts DCMI capture completion
             pac::NVIC::unpend(pac::Interrupt::DCMI);
-            unsafe { pac::NVIC::unmask(pac::Interrupt::DCMI); }
+            unsafe {
+                pac::NVIC::unmask(pac::Interrupt::DCMI);
+            }
         });
 
         self.dcmi.ier.write(|w| {
@@ -333,11 +352,14 @@ impl DcmiWrapper
         });
     }
 
+    /// Enable `DMA2_STREAM1` interrupts
     fn enable_dma_interrupts(&mut self) {
         cortex_m::interrupt::free(|_| {
             // enable interrupts for DMA2 transfer completion
             pac::NVIC::unpend(pac::Interrupt::DMA2_STREAM1);
-            unsafe { pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1); }
+            unsafe {
+                pac::NVIC::unmask(pac::Interrupt::DMA2_STREAM1);
+            }
         });
 
         let mut stream1_chan1 = &self.dma2.st[1];
@@ -358,7 +380,7 @@ impl DcmiWrapper
         rprintln!("05 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
     }
 
-    /// copy data from the currently buffer into the provided slice
+    /// Copy data from the current DMA-idle buffer into the provided slice
     pub fn copy_image_buf(&mut self, dest: &mut [u8]) {
         let cur_unused = UNUSED_BUF_IDX.load(Ordering::SeqCst);
         // reset the counter of transferred frames
@@ -374,7 +396,6 @@ impl DcmiWrapper
         };
 
         let source = unsafe { raw_source.as_ref().unwrap() };
-
         dest.copy_from_slice(&source[0..dest.len()]);
     }
 
@@ -399,7 +420,7 @@ impl DcmiWrapper
 
     /// Returns the number of frames that have been transferred since the last `copy_image_buf`
     pub fn available_frame_count(&mut self) -> usize {
-        return UNREAD_FRAMES_COUNT.load(Ordering::SeqCst)
+        return UNREAD_FRAMES_COUNT.load(Ordering::SeqCst);
     }
 
     /// Dump count of captures and dma transfers to rtt
@@ -435,8 +456,7 @@ pub fn dma2_stream1_irqhandler() {
 
     // clear any pending interrupt bits by writing to LIFCR:
     // this clears the corresponding TCIFx flag in the DMA2 LISR register
-    dma2.lifcr
-        .write(|w| w.ctcif1().set_bit());
+    dma2.lifcr.write(|w| w.ctcif1().set_bit());
     //NOTE add .chtif1().set_bit() in order to clear half transfer interrupt
 
     let stream1_chan1 = &dma2.st[1];
@@ -467,12 +487,8 @@ fn init_dma_buffers(stream1_chan1: &pac::dma2::ST) {
         BUF2_PTR = buf2_addr;
 
         //set the initial buffers to be used by DMA
-        stream1_chan1
-            .m0ar
-            .write(|w| w.bits(buf0_addr as u32));
-        stream1_chan1
-            .m1ar
-            .write(|w| w.bits(buf1_addr as u32));
+        stream1_chan1.m0ar.write(|w| w.bits(buf0_addr as u32));
+        stream1_chan1.m1ar.write(|w| w.bits(buf1_addr as u32));
     }
 }
 
@@ -486,8 +502,8 @@ fn swap_idle_and_unused_buf(stream1_chan1: &pac::dma2::ST) {
     // let m1ar = stream1_chan1.m1ar.read().bits();
 
     let cur_unused = UNUSED_BUF_IDX.load(Ordering::SeqCst);
-    let new_target =  match cur_unused {
-        0 => (unsafe {BUF0_PTR}) as u32,
+    let new_target = match cur_unused {
+        0 => (unsafe { BUF0_PTR }) as u32,
         1 => (unsafe { BUF1_PTR }) as u32,
         2 => (unsafe { BUF2_PTR }) as u32,
         _ => panic!("invalid cur_unused"),
@@ -524,7 +540,7 @@ pub fn dcmi_irqhandler() {
         let ris_val = dcmi.ris.read().bits();
         // ordinarily we expect this interrupt on frame capture completion
         if 0b11001 != ris_val {
-            rprintln!("dcmi ris: {:#b}", dcmi.ris.read().bits());
+            rprintln!("error dcmi ris: {:#b}", dcmi.ris.read().bits());
         }
     }
 

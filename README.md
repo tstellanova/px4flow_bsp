@@ -30,6 +30,14 @@ This assumes you are using the [cortex-m-rt crate](https://crates.io/crates/cort
 to construct your embedded application, and using its `#[interrupt]` to handle interrupts.
 
 
+## Example
+
+The `play` example is designed to run on the px4flow using jlink:
+
+- In one shell run: `./start_gdb_server_jlink.sh`
+- In another shell run `JLinkRTTClient`
+- Then build and start app with `cargo run --example play --features "rttdebug" `
+
 ## Status
 
 Work in progress
