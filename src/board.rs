@@ -4,7 +4,7 @@ use embedded_hal::blocking::delay::DelayMs;
 use eeprom24x::Eeprom24x;
 use embedded_hal::digital::v1_compat::OldOutputPin;
 use l3gd20::L3gd20;
-use mt9v034_i2c::{Binning, Mt9v034, ParamContext};
+use mt9v034_i2c::{Mt9v034, ParamContext, BinningFactor};
 
 use core::sync::atomic::{AtomicPtr, Ordering};
 use cortex_m::singleton;
@@ -117,6 +117,13 @@ impl Board<'_> {
         // configure image sensor with two distinct contexts:
         // - Context A: 256x256 window, binning 4 -> 64x64 output images (flow-64)
         // - Context B: 480x480 window, binning 4 -> 120x120 output images (flow-120)
+        const BINNING_A: BinningFactor = BinningFactor::Four;
+        const BINNING_B: BinningFactor = BinningFactor::Four;
+        const WINDOW_W_A: u16 = 256;
+        const WINDOW_H_A: u16 = 256;
+        const WINDOW_W_B: u16 = 480;
+        const WINDOW_H_B: u16 = 480;
+
         cam_config
             .setup_with_dimensions(
                 WINDOW_W_A,
@@ -130,13 +137,6 @@ impl Board<'_> {
                 ParamContext::ContextA,
             )
             .expect("could not configure MT9V034");
-
-        const BINNING_B: Binning = Binning::Four;
-        const BINNING_A: Binning = Binning::Four;
-        const WINDOW_W_B: u16 = 480;
-        const WINDOW_H_B: u16 = 480;
-        const WINDOW_W_A: u16 = 256;
-        const WINDOW_H_A: u16 = 256;
 
         // Note that we do not call dcmi_wrap.enable_capture() here --
         // instead we allow the board user to do that if desired.
