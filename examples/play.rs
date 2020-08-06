@@ -26,17 +26,25 @@ const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 use base64::display::Base64Display;
 use px4flow_bsp::dcmi::{ImageFrameBuf, SQ_FRAME_BUF_LEN};
 use px4flow_bsp::{board::Board, dcmi};
+use core::sync::atomic::{AtomicPtr, Ordering};
 
+
+
+static mut BOARD_PTR: AtomicPtr<Board> = AtomicPtr::new(core::ptr::null_mut());
 /// should be called whenever DMA2 completes a transfer
 #[interrupt]
 fn DMA2_STREAM1() {
     // forward to DCMI's interrupt handler
-    dcmi::dma2_stream1_irqhandler();
+    unsafe {
+        (*BOARD_PTR.load(Ordering::SeqCst)).dcmi_wrap.as_mut().unwrap().dma2_stream1_irqhandler();
+    }
+    //dcmi::dma2_stream1_irqhandler();
 }
 
 /// should be called whenever DCMI completes a frame
 #[interrupt]
 fn DCMI() {
+    //TODO eliminate this interrupt?
     // forward to DCMI's interrupt handler
     dcmi::dcmi_irqhandler();
 }
