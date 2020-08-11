@@ -24,11 +24,9 @@ const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 // use mt9v034_i2c::PixelTestPattern;
 
 use base64::display::Base64Display;
-use px4flow_bsp::dcmi::{ImageFrameBuf, SQ_FRAME_BUF_LEN};
-use px4flow_bsp::{board::Board, dcmi};
 use core::sync::atomic::{AtomicPtr, Ordering};
-
-
+use px4flow_bsp::board::Board;
+use px4flow_bsp::dcmi::{ImageFrameBuf, SQ_FRAME_BUF_LEN};
 
 static mut BOARD_PTR: AtomicPtr<Board> = AtomicPtr::new(core::ptr::null_mut());
 /// should be called whenever DMA2 completes a transfer
@@ -36,17 +34,17 @@ static mut BOARD_PTR: AtomicPtr<Board> = AtomicPtr::new(core::ptr::null_mut());
 fn DMA2_STREAM1() {
     // forward to DCMI's interrupt handler
     unsafe {
-        (*BOARD_PTR.load(Ordering::SeqCst)).dcmi_wrap.as_mut().unwrap().dma2_stream1_irqhandler();
+        (*BOARD_PTR.load(Ordering::SeqCst)).handle_dma2_stream1_interrupt();
     }
-    //dcmi::dma2_stream1_irqhandler();
 }
 
 /// should be called whenever DCMI completes a frame
 #[interrupt]
 fn DCMI() {
-    //TODO eliminate this interrupt?
     // forward to DCMI's interrupt handler
-    dcmi::dcmi_irqhandler();
+    unsafe {
+        (*BOARD_PTR.load(Ordering::SeqCst)).handle_dcmi_interrupt();
+    }
 }
 
 /// Setup core-coupled RAM buffers for faster image manipulation
@@ -61,6 +59,10 @@ fn main() -> ! {
     rprintln!("-- > MAIN --");
 
     let mut board = Board::default();
+    // this provides the interrupt handler access to the shared Board struct
+    unsafe {
+        BOARD_PTR.store(&mut board, Ordering::SeqCst);
+    }
 
     let loop_interval = GYRO_REPORTING_INTERVAL_MS as u8;
     rprintln!("loop_interval: {}", loop_interval);
@@ -69,12 +71,13 @@ fn main() -> ! {
     let _ = board.comms_led.set_high();
     let _ = board.error_led.set_high();
 
-    // This is how we can enable the grayscale test pattern
+    let fast_img_bufs: [_; 2] = unsafe { [&mut FAST_IMG0, &mut FAST_IMG1] };
+    // This is how we can enable a grayscale test pattern on the MT9V034
     // let _ = board.camera_config.as_mut().unwrap().
     //     enable_pixel_test_pattern(true, PixelTestPattern::DiagonalShade);
 
     if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
-        dcmi_wrap.enable_capture();
+        dcmi_wrap.enable_capture(&board.dma2);
     }
     let mut img_count: u32 = 0;
     let mut flow_img_idx = 0;
@@ -89,23 +92,20 @@ fn main() -> ! {
                 }
             }
             if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
-                let avail_frames = dcmi_wrap.available_frame_count();
-                if avail_frames > 0 {
-                    //rprintln!("avail: {}", avail_frames);
-                    let dst = if flow_img_idx == 0 {
-                        unsafe { &mut FAST_IMG0 }
-                    } else {
-                        unsafe { &mut FAST_IMG1 }
-                    };
-                    flow_img_idx = (flow_img_idx + 1) % 2;
-                    dcmi_wrap.copy_image_buf(dst);
-                    // in this example we dump pixel data as base64 encoded
-                    // raw 8-bit values to the rtt console
-                    // in a real application we'd do something more substantial with the data
-                    dump_pixels(img_count, dst);
+                let dst = fast_img_bufs[flow_img_idx].as_mut();
+                if let Ok(read_len) = dcmi_wrap.read_available(dst) {
+                    if read_len > 0 {
+                        flow_img_idx = (flow_img_idx + 1) % 2;
 
-                    let _ = board.activity_led.toggle();
-                    img_count += 1;
+                        // In this example we dump pixel data as base64 encoded
+                        // raw 8-bit values to the rtt console.
+                        // In a real application we'd do something more substantial
+                        // with the data, such as calcualte optical flow
+                        dump_pixels(img_count, dst);
+
+                        let _ = board.activity_led.toggle();
+                        img_count += 1;
+                    }
                 }
             }
         }

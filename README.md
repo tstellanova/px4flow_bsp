@@ -16,13 +16,19 @@ interrupt handlers, ie:
 /// should be called whenever DMA2 completes a transfer
 #[interrupt]
 fn DMA2_STREAM1() {
-    dcmi::dma2_stream1_irqhandler();
+    // forward to board's interrupt handler
+    unsafe {
+        (*BOARD_PTR.load(Ordering::SeqCst)).handle_dma2_stream1_interrupt();
+    }
 }
 
 /// should be called whenever DCMI completes a frame
 #[interrupt]
 fn DCMI() {
-    dcmi::dcmi_irqhandler();
+    // forward to board's interrupt handler
+    unsafe {
+        (*BOARD_PTR.load(Ordering::SeqCst)).handle_dcmi_interrupt();
+    }
 }
 ```
 
