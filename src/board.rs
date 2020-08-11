@@ -1,15 +1,23 @@
+/*
+Copyright (c) 2020 Todd Stellanova
+LICENSE: BSD3 (see LICENSE file)
+*/
+
 use crate::peripherals::*;
+
 use embedded_hal::blocking::delay::DelayMs;
+use p_hal::stm32 as pac;
+use stm32f4xx_hal as p_hal;
 
 use eeprom24x::Eeprom24x;
 use embedded_hal::digital::v1_compat::OldOutputPin;
 use l3gd20::L3gd20;
-use mt9v034_i2c::{Mt9v034, ParamContext, BinningFactor};
+use mt9v034_i2c::{BinningFactor, Mt9v034, ParamContext};
 
 use core::sync::atomic::{AtomicPtr, Ordering};
 use cortex_m::singleton;
 
-use crate::dcmi::DcmiWrapper;
+use crate::dcmi::{DcmiWrapper, ImageFrameBuf, SQ_FRAME_BUF_LEN};
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
 
@@ -26,14 +34,15 @@ pub struct Board<'a> {
     pub camera_config: Option<CameraConfigType<'a>>,
     pub gyro: Option<GyroType>,
     pub eeprom: Option<EepromType<'a>>,
-    pub dcmi_wrap: Option<DcmiWrapper>,
+    pub dma2: pac::DMA2,
+    pub dcmi_wrap: Option<DcmiWrapper<'a>>,
     pub usart2: Usart2Port,
     pub usart3: Usart3Port,
     pub uart4: Uart4Port,
 }
 
-impl Board<'_> {
-    pub fn default() -> Self {
+impl Default for Board<'_> {
+    fn default() -> Self {
         #[cfg(feature = "rttdebug")]
         rprintln!("new board");
 
@@ -53,7 +62,7 @@ impl Board<'_> {
             dcmi,
         ) = setup_peripherals();
 
-        //TODO verify we are safe to forget the DCMI pins after configuration
+        //We are safe to forget the DCMI pins after configuration
         core::mem::forget(dcmi_ctrl_pins);
         core::mem::forget(dcmi_data_pins);
 
@@ -104,8 +113,11 @@ impl Board<'_> {
             let eeprom_opt = Some(eeprom);
         }
 
-        let mut dcmi_wrap = DcmiWrapper::default(dcmi, dma2);
-        dcmi_wrap.setup();
+        let dma_buf0: &'static mut ImageFrameBuf =
+            singleton!(:ImageFrameBuf = [0u8; SQ_FRAME_BUF_LEN]).unwrap();
+
+        let mut dcmi_wrap = DcmiWrapper::default(dcmi);
+        dcmi_wrap.setup(&dma2);
 
         #[cfg(feature = "breakout")]
         let base_i2c_address = mt9v034_i2c::ARDUCAM_BREAKOUT_ADDRESS;
@@ -150,10 +162,27 @@ impl Board<'_> {
             gyro: gyro_opt,
             delay_source,
             eeprom: eeprom_opt,
+            dma2: dma2,
             dcmi_wrap: Some(dcmi_wrap),
             usart2,
             usart3,
             uart4,
+        }
+    }
+}
+
+impl Board<'_> {
+    /// Call this on the DMA2_STREAM1 interrupt
+    pub fn handle_dma2_stream1_interrupt(&mut self) {
+        if let Some(dcmi_wrap) = self.dcmi_wrap.as_mut() {
+            dcmi_wrap.dma2_stream1_irqhandler();
+        }
+    }
+
+    /// Call this on the DCMI interrupt
+    pub fn handle_dcmi_interrupt(&mut self) {
+        if let Some(dcmi_wrap) = self.dcmi_wrap.as_mut() {
+            dcmi_wrap.dcmi_irqhandler();
         }
     }
 }
