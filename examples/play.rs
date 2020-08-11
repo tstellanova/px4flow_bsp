@@ -26,7 +26,9 @@ const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 use base64::display::Base64Display;
 use core::sync::atomic::{AtomicPtr, Ordering};
 use px4flow_bsp::board::Board;
-use px4flow_bsp::dcmi::{ImageFrameBuf, SQ_FRAME_BUF_LEN};
+use px4flow_bsp::dcmi::{
+    ImageFrameBuf, Sq120FrameBuf, FRAME_BUF_LEN, SQ120_FRAME_BUF_LEN,
+};
 
 static mut BOARD_PTR: AtomicPtr<Board> = AtomicPtr::new(core::ptr::null_mut());
 /// should be called whenever DMA2 completes a transfer
@@ -49,9 +51,12 @@ fn DCMI() {
 
 /// Setup core-coupled RAM buffers for faster image manipulation
 #[link_section = ".ccmram.IMG_BUFS"]
-static mut FAST_IMG0: ImageFrameBuf = [0u8; SQ_FRAME_BUF_LEN];
+static mut FAST_IMG0: ImageFrameBuf = [0u8; FRAME_BUF_LEN];
+// static mut FAST_IMG0: Sq120FrameBuf = [0u8; SQ120_FRAME_BUF_LEN];
+
 #[link_section = ".ccmram.IMG_BUFS"]
-static mut FAST_IMG1: ImageFrameBuf = [0u8; SQ_FRAME_BUF_LEN];
+static mut FAST_IMG1: ImageFrameBuf = [0u8; FRAME_BUF_LEN];
+// static mut FAST_IMG1: Sq120FrameBuf = [0u8; SQ120_FRAME_BUF_LEN];
 
 #[entry]
 fn main() -> ! {

@@ -17,7 +17,7 @@ use mt9v034_i2c::{BinningFactor, Mt9v034, ParamContext};
 use core::sync::atomic::{AtomicPtr, Ordering};
 use cortex_m::singleton;
 
-use crate::dcmi::{DcmiWrapper, ImageFrameBuf, SQ_FRAME_BUF_LEN};
+use crate::dcmi::{DcmiWrapper, SQ_DIM_120};
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
 
@@ -113,10 +113,11 @@ impl Default for Board<'_> {
             let eeprom_opt = Some(eeprom);
         }
 
-        let dma_buf0: &'static mut ImageFrameBuf =
-            singleton!(:ImageFrameBuf = [0u8; SQ_FRAME_BUF_LEN]).unwrap();
-
+        // option A: select Context A with row and column bin 4 (188x120)
         let mut dcmi_wrap = DcmiWrapper::default(dcmi);
+        // option B: select Context B with square-120 images
+        // let mut dcmi_wrap = DcmiWrapper::new(dcmi, SQ_DIM_120, SQ_DIM_120, 8);
+
         dcmi_wrap.setup(&dma2);
 
         #[cfg(feature = "breakout")]
@@ -127,13 +128,13 @@ impl Default for Board<'_> {
             Mt9v034::new(i2c2_bus_mgr.acquire(), base_i2c_address);
 
         // configure image sensor with two distinct contexts:
-        // - Context A: 256x256 window, binning 4 -> 64x64 output images (flow-64)
-        // - Context B: 480x480 window, binning 4 -> 120x120 output images (flow-120)
+        // - Context A: 480x480 window, binning 4 -> 120x120 output images (square-120)
+        // - Context B: 752x480 window, binning 4 -> 188x120 output images
         const BINNING_A: BinningFactor = BinningFactor::Four;
         const BINNING_B: BinningFactor = BinningFactor::Four;
-        const WINDOW_W_A: u16 = 256;
-        const WINDOW_H_A: u16 = 256;
-        const WINDOW_W_B: u16 = 480;
+        const WINDOW_W_A: u16 = 480;
+        const WINDOW_H_A: u16 = 480;
+        const WINDOW_W_B: u16 = 752;
         const WINDOW_H_B: u16 = 480;
 
         cam_config
@@ -146,7 +147,7 @@ impl Default for Board<'_> {
                 WINDOW_H_B,
                 BINNING_B,
                 BINNING_B,
-                ParamContext::ContextA,
+                ParamContext::ContextB,
             )
             .expect("could not configure MT9V034");
 

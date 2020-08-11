@@ -20,14 +20,31 @@ pub const SQ_DIM_64: usize = 64;
 pub const SQ_DIM_120: usize = 120;
 pub const SQ_64_PIX_COUNT: usize = SQ_DIM_64 * SQ_DIM_64;
 pub const SQ_120_PIX_COUNT: usize = SQ_DIM_120 * SQ_DIM_120;
-pub const MT9V034_PIX_COUNT: usize = 752 * 480;
-pub const MT9V034_BIN4_PIX_COUNT: usize = MT9V034_PIX_COUNT / 16;
+pub const MAX_WIDTH_BIN4: usize = 188;
+pub const MAX_HEIGHT_BIN4: usize = 120;
+pub const MT9V034_MAX_PIX_COUNT: usize = 752 * 480;
+/// Count of pixels in bin4 image (column and row bin 4)
+pub const MT9V034_BIN4_PIX_COUNT: usize = MAX_WIDTH_BIN4 * MAX_HEIGHT_BIN4;
 
-//TODO this assumes 8 bpp
-pub const SQ_FRAME_BUF_LEN: usize = SQ_120_PIX_COUNT;
+//TODO frame buffer sizes assume 8 bits per pixel currently
+
+/// Minimal square frame buffer with binning four: 64x64 pixels
+pub const SQ64_FRAME_BUF_LEN: usize = SQ_64_PIX_COUNT;
+/// A 64x64 square frame buffer (used with binning four)
+pub type Sq64FrameBuf = [u8; SQ64_FRAME_BUF_LEN];
+
+/// Maximum square frame buffer with binning four: 120x120 pixels
+pub const SQ120_FRAME_BUF_LEN: usize = SQ_120_PIX_COUNT;
+/// A 120x120 square frame buffer
+pub type Sq120FrameBuf = [u8; SQ120_FRAME_BUF_LEN];
+
+/// The length of ImageFrameBuf buffer. Note that we currently use
+/// the maximum bin4 size, which is the max practical with the CCRAM and SRAM
+/// available on the px4flow.
+pub const FRAME_BUF_LEN: usize = MT9V034_BIN4_PIX_COUNT;
 
 /// Buffer to store image data
-pub type ImageFrameBuf = [u8; SQ_FRAME_BUF_LEN];
+pub type ImageFrameBuf = [u8; FRAME_BUF_LEN];
 
 /// Stores the buffers and indices required to operate DMA in "double buffer" mode,
 /// where two buffers are in service to DMA at any given time,
@@ -57,21 +74,21 @@ pub struct DcmiWrapper<'a> {
     transfer: DmaRotatingTransfer<'a>,
 }
 
-static mut IMG_BUF0: ImageFrameBuf = [0u8; SQ_FRAME_BUF_LEN];
-static mut IMG_BUF1: ImageFrameBuf = [0u8; SQ_FRAME_BUF_LEN];
-static mut IMG_BUF2: ImageFrameBuf = [0u8; SQ_FRAME_BUF_LEN];
+static mut IMG_BUF0: ImageFrameBuf = [0u8; FRAME_BUF_LEN];
+static mut IMG_BUF1: ImageFrameBuf = [0u8; FRAME_BUF_LEN];
+static mut IMG_BUF2: ImageFrameBuf = [0u8; FRAME_BUF_LEN];
 
 impl DcmiWrapper<'_> {
     /// New wrapper ready for DCMI with a 64x64, 8 bits per pixel capture
     pub fn default(dcmi: pac::DCMI) -> Self {
-        Self::new(dcmi, SQ_DIM_120, SQ_DIM_120, 8)
+        Self::new(dcmi, MAX_WIDTH_BIN4, MAX_HEIGHT_BIN4, 8)
     }
 
-    ///
+    /// Create a new DcmiWrapper with configured frame dimensions
     pub fn new(
         dcmi: pac::DCMI,
-        frame_height: usize,
         frame_width: usize,
+        frame_height: usize,
         bits_per_pixel: u8,
     ) -> Self {
         let pixel_count = frame_height * frame_width;
