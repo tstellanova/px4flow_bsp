@@ -77,11 +77,7 @@ pub fn setup_peripherals() -> (
 
     //activity LED
     #[cfg(feature = "breakout")]
-    let user_led0 = gpioa
-        .pa1
-        .into_push_pull_output()
-        .set_speed(Speed::Low)
-        .downgrade();
+    let user_led0 = gpioa.pa1.into_push_pull_output().downgrade();
     #[cfg(not(feature = "breakout"))]
     let user_led0 = gpioe.pe2.into_push_pull_output().downgrade();
 
