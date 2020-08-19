@@ -11,9 +11,6 @@ use p_hal::stm32 as pac;
 use rt::entry;
 use stm32f4xx_hal as p_hal;
 
-
-
-
 use pac::interrupt;
 
 use panic_rtt_core::{self, rprint, rprintln, rtt_init_print};
@@ -24,13 +21,14 @@ use embedded_hal::digital::v2::ToggleableOutputPin;
 const GYRO_REPORTING_RATE_HZ: u16 = 95;
 const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 
-// use mt9v034_i2c::PixelTestPattern;
+use mt9v034_i2c::PixelTestPattern;
 
 use base64::display::Base64Display;
 use core::sync::atomic::{AtomicPtr, Ordering};
 use px4flow_bsp::board::Board;
 use px4flow_bsp::dcmi::{
-    ImageFrameBuf, FRAME_BUF_LEN,
+    ImageFrameBuf,
+    FRAME_BUF_LEN,
     // Sq120FrameBuf, SQ120_FRAME_BUF_LEN,
 };
 
@@ -80,7 +78,8 @@ fn main() -> ! {
     let _ = board.comms_led.set_high();
     let _ = board.error_led.set_high();
 
-    let mut fast_img_bufs: [&mut ImageFrameBuf; 2] = unsafe { [&mut FAST_IMG0, &mut FAST_IMG1] };
+    let mut fast_img_bufs: [&mut ImageFrameBuf; 2] =
+        unsafe { [&mut FAST_IMG0, &mut FAST_IMG1] };
     // This is how we can enable a grayscale test pattern on the MT9V034
     // let _ = board.camera_config.as_mut().unwrap().
     //     enable_pixel_test_pattern(true, PixelTestPattern::DiagonalShade);
@@ -101,9 +100,15 @@ fn main() -> ! {
                 }
             }
             if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
-                if let Ok(read_len) = dcmi_wrap.read_available(fast_img_bufs[flow_img_idx].as_mut()) {
+                if let Ok(read_len) = dcmi_wrap
+                    .read_available(fast_img_bufs[flow_img_idx].as_mut())
+                {
                     if read_len > 0 {
-                        dump_change_events(img_count, flow_img_idx, &mut fast_img_bufs);
+                        dump_change_events(
+                            img_count,
+                            flow_img_idx,
+                            &mut fast_img_bufs,
+                        );
                         let last_idx = (flow_img_idx + 1) % 2;
                         flow_img_idx = last_idx;
 
@@ -123,23 +128,35 @@ fn main() -> ! {
     }
 }
 
+fn calc_fft(samples: &mut ImageFrameBuf) {
+    let spectrum = microfft::real::rfft_16(&mut samples);
+    rprintln!("\n--- {:?}", spectrum);
+}
+
 /// calculate differences between pixels
 /// differences < 16 are filtered out
-fn dump_change_events(timestamp: u32, flow_img_idx: usize, fast_img_bufs: &mut [&mut ImageFrameBuf; 2]) {
+fn dump_change_events(
+    timestamp: u32,
+    flow_img_idx: usize,
+    fast_img_bufs: &mut [&mut ImageFrameBuf; 2],
+) {
     let last_idx = (flow_img_idx + 1) % 2;
 
     for i in 0..fast_img_bufs[last_idx].len() {
         let last_val = fast_img_bufs[last_idx][i];
         let cur_val = fast_img_bufs[flow_img_idx][i];
-        let event_val =
-            if cur_val > last_val {
-                //store diff > 16 in highest four bits
-                (cur_val - last_val) & 0b11110000
-            }
-            else {
-                //store diff > 16 in lowest four bits
-                ((last_val - cur_val) & 0b11110000) >> 4
-            };
+        let event_val = if cur_val == last_val {
+            0
+        } else if cur_val > last_val {
+            //map 255 diff max to four bits
+            let inter_val = (((cur_val - last_val) as u16 * 15) / 255) as u8;
+            inter_val << 4
+        } else {
+            //map 255 diff max to four bits
+            let inter_val = (((last_val - cur_val) as u16 * 15) / 255) as u8;
+            inter_val
+        };
+
         fast_img_bufs[last_idx][i] = event_val;
     }
     dump_pixels(timestamp, fast_img_bufs[last_idx]);
