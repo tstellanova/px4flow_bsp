@@ -38,6 +38,11 @@ eeprom24x = "0.3.0"
 cortex-m-rt = "0.6.12"
 panic-rtt-core = "0.1.1"
 base64 = {version="0.12.3", default-features=false}
+correlation_flow = {version="0.1.0", path="../correlation_flow" }
+
+[profile.release]
+debug = true
+
 
 [features]
 default = []
