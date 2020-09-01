@@ -30,7 +30,7 @@ stm32f4xx-hal = {version="0.8.3",  features = ["stm32f407", "rt"] }
 # Gyro
 l3gd20 = "0.2.0"
 # Camera / imaging sensor
-mt9v034-i2c = {path="../mt9v034-i2c", features=["rttdebug"], version="0.1.5"}
+mt9v034-i2c = {path="../mt9v034-i2c", version="0.1.5"}
 # Serial EEPROM
 eeprom24x = "0.3.0"
 
