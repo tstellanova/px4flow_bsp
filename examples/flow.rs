@@ -103,6 +103,9 @@ fn main() -> ! {
     if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
         dcmi_wrap.enable_capture(&board.dma2);
     }
+
+    let frame_start_x = (MAX_WIDTH_BIN4 - SQ_DIM_64) / 2;
+    let frame_start_y = (MAX_HEIGHT_BIN4 - SQ_DIM_64) / 2;
     let mut img_count: u32 = 0;
     let mut flow_img_idx = 0;
     loop {
@@ -122,11 +125,10 @@ fn main() -> ! {
                 //let dst = fast_img_bufs[flow_img_idx].as_mut();
                 if let Ok(read_len) = dcmi_wrap.read_available(full_framebuf) {
                     if read_len > 0 {
-                        // copy a smaller chunk of the full frame to a working buffer
-                        // pull a small block from the center of the parent frame
+                        // pull a small working block from the center of the parent frame
                         fill_block_from_frame(&full_framebuf, fast_sq64_img_bufs[flow_img_idx],
-                                              (MAX_WIDTH_BIN4 - SQ_DIM_64) / 2,
-                                              (MAX_HEIGHT_BIN4 - SQ_DIM_64) / 2,
+                                              frame_start_x,
+                                              frame_start_y,
                                               MAX_WIDTH_BIN4,
                                               SQ_DIM_64);
                         let cur_flow_image = fast_sq64_img_bufs[flow_img_idx].as_ref();
@@ -134,7 +136,15 @@ fn main() -> ! {
                         let prior_flow_image = fast_sq64_img_bufs[flow_img_idx].as_ref();
 
                         let (dx, dy) = correlator.measure_translation(cur_flow_image, prior_flow_image);
-                        rprintln!("{} ({}, {})", img_count, dx, dy);
+                        if (dx.abs() > 0) || (dy.abs() > 0) {
+                            rprintln!("{} ({}, {})", img_count, dx, dy);
+                        }
+
+                        if (dx + dy) >= 63 {
+                            dump_pixels(img_count, prior_flow_image );
+                            dump_pixels(img_count, cur_flow_image );
+                            rprintln!("\n---");
+                        }
 
                         let _ = board.comms_led.toggle();
                         img_count += 1;
@@ -146,4 +156,23 @@ fn main() -> ! {
     }
 }
 
+use base64::display::Base64Display;
 
+/// output image data as 8-bit raw pixels in base64 encoded format, to RTT
+fn dump_pixels(image_count: u32, buf: &[u8]) {
+    rprintln!("\n--- {}", image_count);
+
+    //process input chunks that are multiples of 12 bytes (for base64 continuity)
+    const CHUNK_SIZE: usize = 24;
+    let total_len = buf.len();
+    let mut read_idx = 0;
+    while read_idx < total_len {
+        let max_idx = total_len.min(read_idx + CHUNK_SIZE);
+        let wrapper = Base64Display::with_config(
+            &buf[read_idx..max_idx],
+            base64::STANDARD,
+        );
+        rprint!("{}", wrapper);
+        read_idx += CHUNK_SIZE;
+    }
+}

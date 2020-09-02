@@ -26,9 +26,7 @@ const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 use base64::display::Base64Display;
 use core::sync::atomic::{AtomicPtr, Ordering};
 use px4flow_bsp::board::Board;
-use px4flow_bsp::dcmi::{
-    ImageFrameBuf, Sq120FrameBuf, FRAME_BUF_LEN, SQ120_FRAME_BUF_LEN,
-};
+use px4flow_bsp::dcmi::{ ImageFrameBuf, FRAME_BUF_LEN};
 
 static mut BOARD_PTR: AtomicPtr<Board> = AtomicPtr::new(core::ptr::null_mut());
 /// should be called whenever DMA2 completes a transfer
