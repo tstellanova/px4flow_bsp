@@ -11,6 +11,7 @@ use stm32f4xx_hal as p_hal;
 
 use eeprom24x::Eeprom24x;
 use embedded_hal::digital::v1_compat::OldOutputPin;
+use embedded_hal::digital::v2::OutputPin;
 use l3gd20::L3gd20;
 use mt9v034_i2c::{BinningFactor, Mt9v034, ParamContext};
 
@@ -52,7 +53,7 @@ impl Default for Board<'_> {
             i2c1_port,
             i2c2_port,
             spi2_port,
-            spi_cs_gyro,
+            mut spi_cs_gyro,
             usart2,
             usart3,
             uart4,
@@ -73,9 +74,13 @@ impl Default for Board<'_> {
         let mut gyro_opt: Option<_> = None;
         #[cfg(not(feature = "breakout"))]
         {
+            let _ = spi_cs_gyro.set_high(); // initially deselected
             let old_gyro_csn = OldOutputPin::new(spi_cs_gyro);
+
             if let Ok(mut gyro) = L3gd20::new(spi2_port, old_gyro_csn) {
                 if let Ok(device_id) = gyro.who_am_i() {
+                    #[cfg(feature = "rttdebug")]
+                    rprintln!("gyro ID: 0x{:X}", device_id);
                     if device_id == 0xD4 {
                         #[cfg(feature = "rttdebug")]
                         rprintln!("gyro setup done");

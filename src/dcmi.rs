@@ -365,8 +365,8 @@ impl DcmiWrapper<'_> {
     /// Enable or disable the DMA2 stream
     fn toggle_dma2_stream1(&mut self, dma2: &pac::DMA2, enable: bool) {
         let mut stream1_chan1 = &dma2.st[1];
-        #[cfg(feature = "rttdebug")]
-        rprintln!("08 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
+        // #[cfg(feature = "rttdebug")]
+        // rprintln!("08 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
 
         if enable {
             stream1_chan1.cr.modify(|_, w| w.en().enabled());
@@ -374,14 +374,14 @@ impl DcmiWrapper<'_> {
             stream1_chan1.cr.modify(|_, w| w.en().disabled());
         }
 
-        #[cfg(feature = "rttdebug")]
-        rprintln!("09 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
+        // #[cfg(feature = "rttdebug")]
+        // rprintln!("09 dma2_cr: {:#b}", stream1_chan1.cr.read().bits());
     }
 
     /// Enable or disable the DCMI interface
     fn toggle_dcmi(&mut self, enable: bool) {
-        #[cfg(feature = "rttdebug")]
-        rprintln!("toggle dcmi_cr: {:#b}", self.dcmi.cr.read().bits());
+        // #[cfg(feature = "rttdebug")]
+        // rprintln!("toggle dcmi_cr: {:#b}", self.dcmi.cr.read().bits());
 
         if enable {
             // enable the interface:
@@ -395,8 +395,8 @@ impl DcmiWrapper<'_> {
             self.dcmi.cr.modify(|_, w| w.capture().clear_bit());
         }
 
-        #[cfg(feature = "rttdebug")]
-        rprintln!("toggle dcmi_cr: {:#b}", self.dcmi.cr.read().bits());
+        // #[cfg(feature = "rttdebug")]
+        // rprintln!("toggle dcmi_cr: {:#b}", self.dcmi.cr.read().bits());
     }
 
     /// Enable `DCMI` interrupts

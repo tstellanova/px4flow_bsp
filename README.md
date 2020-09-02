@@ -88,10 +88,10 @@ SWD and SWCLK pads noted on the bottom of the board appear to be swapped
 | PB9      | I2C1 SDA       |
 | PB10     | I2C2 SCL       |
 | PB11     | I2C2 SDA       |
-| PB12      | spi_cs_gyro       |
-| PB13      | SPI2 SCLK       |
-| PB14      | SPI2 CIPO       |
-| PB15      | SPI2 COPI       |
+| PB12     | spi_cs_gyro       |
+| PB13     | SPI2 SCLK       |
+| PB14     | SPI2 CIPO       |
+| PB15     | SPI2 COPI       |
 | PC6      | DCMI_D0       |
 | PC7      | DCMI_D1       |
 | PC8      | XCLK       |
@@ -103,7 +103,7 @@ SWD and SWCLK pads noted on the bottom of the board appear to be swapped
 | PD5      | TBD       |
 | PD6      | TBD       |
 | PD7      | TBD       |
-| PD15      | TBD       |
+| PD15     | TBD       |
 | PE0      | DCMI_D2       |
 | PE1      | DCMI_D3       |
 | PE2      | user_led0       |

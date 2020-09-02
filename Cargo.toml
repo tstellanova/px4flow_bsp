@@ -20,17 +20,17 @@ keywords = [
 ]
 
 [dependencies]
-cortex-m = "0.6.2"
+cortex-m = "0.6.3"
 bare-metal = "1.0.0"
-embedded-hal = { version = "0.2.3", features = ["unproven"] }
+embedded-hal = { version="0.2.4", features = ["unproven"] }
 shared-bus = {version="0.1.4", features=["cortexm"] }
 panic-rtt-core = {version="0.1.1", optional=true}
-
 stm32f4xx-hal = {version="0.8.3",  features = ["stm32f407", "rt"] }
+
 # Gyro
-l3gd20 = "0.2.0"
+l3gd20 = {version="0.3.0", path="../l3gd20" }
 # Camera / imaging sensor
-mt9v034-i2c = {path="../mt9v034-i2c", version="0.1.5"}
+mt9v034-i2c = {version="0.1.5", path="../mt9v034-i2c"}
 # Serial EEPROM
 eeprom24x = "0.3.0"
 

@@ -28,9 +28,7 @@ use mt9v034_i2c::PixelTestPattern;
 use base64::display::Base64Display;
 use core::sync::atomic::{AtomicPtr, Ordering};
 use px4flow_bsp::board::Board;
-use px4flow_bsp::dcmi::{
-    ImageFrameBuf, Sq120FrameBuf, FRAME_BUF_LEN, SQ120_FRAME_BUF_LEN,
-};
+use px4flow_bsp::dcmi::{  ImageFrameBuf, FRAME_BUF_LEN};
 
 static mut BOARD_PTR: AtomicPtr<Board> = AtomicPtr::new(core::ptr::null_mut());
 /// should be called whenever DMA2 completes a transfer
@@ -56,12 +54,9 @@ fn DCMI() {
 /// Setup core-coupled RAM buffers for faster image manipulation
 #[link_section = ".ccmram.IMG_BUFS"]
 static mut FAST_IMG0: ImageFrameBuf = [0u8; FRAME_BUF_LEN];
-// static mut FAST_IMG0: Sq120FrameBuf = [0u8; SQ120_FRAME_BUF_LEN];
-//FRAME_BUF_LEN
 
 #[link_section = ".ccmram.IMG_BUFS"]
 static mut FAST_IMG1: ImageFrameBuf = [0u8; FRAME_BUF_LEN];
-// static mut FAST_IMG1: Sq120FrameBuf = [0u8; SQ120_FRAME_BUF_LEN];
 
 
 #[entry]
@@ -84,8 +79,8 @@ fn main() -> ! {
 
     let fast_img_bufs: [_; 2] = unsafe { [&mut FAST_IMG0, &mut FAST_IMG1] };
     // This is how we can enable a grayscale test pattern on the MT9V034
-    let _ = board.camera_config.as_mut().unwrap().
-        enable_pixel_test_pattern(true, PixelTestPattern::DiagonalShade);
+    // let _ = board.camera_config.as_mut().unwrap().
+    //     enable_pixel_test_pattern(true, PixelTestPattern::DiagonalShade);
 
     let mut correlator: fwht::HadamardCorrelator = fwht::HadamardCorrelator::new(64, 64);
 
@@ -96,14 +91,17 @@ fn main() -> ! {
     let mut flow_img_idx = 0;
     loop {
         for _ in 0..10 {
-            //for _ in 0..10 {
-                // read the 6dof frequently
-                if let Some(six_dof) = board.gyro.as_mut() {
-                    if let Ok(_sample) = six_dof.gyro() {
-                        rprintln!("gyro {}, {}, {}", _sample.x, _sample.y, _sample.z );
+            // read the gyro
+            if let Some(gyro) = board.gyro.as_mut() {
+                if let Ok(check_status) = gyro.status() {
+                    if check_status.overrun || check_status.new_data {
+                        if let Ok(_sample) = gyro.gyro() {
+                            //rprintln!("gyro {}, {}, {}", _sample.x, _sample.y, _sample.z );
+                        }
                     }
                 }
-            //}
+            }
+            // read and process any pending image data
             if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
                 let dst = fast_img_bufs[flow_img_idx].as_mut();
                 if let Ok(read_len) = dcmi_wrap.read_available(dst) {
@@ -112,16 +110,20 @@ fn main() -> ! {
                         flow_img_idx = (flow_img_idx + 1) % 2;
                         let old_frame = fast_img_bufs[flow_img_idx].as_ref();
 
+                        //TODO this image frame we're providing is currently wrong:
+                        // We're given something like a 188x120 BIN4 image
+                        // (in row-major order in the slice)
+                        // and we're treating it as a 64x64 image
                         let (dx, dy) = correlator.measure_translation(new_frame, old_frame);
-                        rprintln!("\n{} ({}, {})", img_count,dx,dy);
+                        rprintln!("{} ({}, {})", img_count, dx, dy);
 
-                        let _ = board.activity_led.toggle();
+                        let _ = board.comms_led.toggle();
                         img_count += 1;
                     }
                 }
             }
         }
-        let _ = board.comms_led.toggle();
+        let _ = board.activity_led.toggle();
     }
 }
 
