@@ -26,9 +26,7 @@ const GYRO_REPORTING_INTERVAL_MS: u16 = 1000 / GYRO_REPORTING_RATE_HZ;
 use base64::display::Base64Display;
 use core::sync::atomic::{AtomicPtr, Ordering};
 use px4flow_bsp::board::Board;
-use px4flow_bsp::dcmi::{
-    ImageFrameBuf, Sq120FrameBuf, FRAME_BUF_LEN, SQ120_FRAME_BUF_LEN,
-};
+use px4flow_bsp::dcmi::{ ImageFrameBuf, FRAME_BUF_LEN};
 
 static mut BOARD_PTR: AtomicPtr<Board> = AtomicPtr::new(core::ptr::null_mut());
 /// should be called whenever DMA2 completes a transfer
@@ -88,14 +86,17 @@ fn main() -> ! {
     let mut flow_img_idx = 0;
     loop {
         for _ in 0..10 {
-            for _ in 0..10 {
-                // read the 6dof frequently
-                if let Some(six_dof) = board.gyro.as_mut() {
-                    if let Ok(_sample) = six_dof.gyro() {
-                        //rprintln!("gyro {}, {}, {}", _sample.x, _sample.y, _sample.z );
+            // read the gyro
+            if let Some(gyro) = board.gyro.as_mut() {
+                if let Ok(check_status) = gyro.status() {
+                    if check_status.overrun || check_status.new_data {
+                        if let Ok(_sample) = gyro.gyro() {
+                            rprintln!("gyro {}, {}, {}", _sample.x, _sample.y, _sample.z );
+                        }
                     }
                 }
             }
+            // read and process any pending image data
             if let Some(dcmi_wrap) = board.dcmi_wrap.as_mut() {
                 let dst = fast_img_bufs[flow_img_idx].as_mut();
                 if let Ok(read_len) = dcmi_wrap.read_available(dst) {
@@ -105,7 +106,7 @@ fn main() -> ! {
                         // In this example we dump pixel data as base64 encoded
                         // raw 8-bit values to the rtt console.
                         // In a real application we'd do something more substantial
-                        // with the data, such as calcualte optical flow
+                        // with the data, such as calculate optical flow
                         dump_pixels(img_count, dst);
 
                         let _ = board.activity_led.toggle();
