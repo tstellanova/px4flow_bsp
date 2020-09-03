@@ -6,8 +6,9 @@ LICENSE: BSD3 (see LICENSE file)
 use crate::peripherals::*;
 
 use embedded_hal::blocking::delay::DelayMs;
-use p_hal::stm32 as pac;
 use stm32f4xx_hal as p_hal;
+use p_hal::dwt::Dwt;
+use p_hal::stm32 as pac;
 
 use eeprom24x::Eeprom24x;
 use embedded_hal::digital::v1_compat::OldOutputPin;
@@ -31,6 +32,7 @@ pub struct Board<'a> {
     pub error_led: LedOutputError,
 
     pub delay_source: DelaySource,
+    pub dwt: Dwt,
     pub external_i2c1: I2c1BusManager,
     pub camera_config: Option<CameraConfigType<'a>>,
     pub gyro: Option<GyroType>,
@@ -50,6 +52,7 @@ impl Default for Board<'_> {
         let (
             raw_user_leds,
             mut delay_source,
+            dwt,
             i2c1_port,
             i2c2_port,
             spi2_port,
@@ -173,6 +176,7 @@ impl Default for Board<'_> {
             usart2,
             usart3,
             uart4,
+            dwt,
         }
     }
 }

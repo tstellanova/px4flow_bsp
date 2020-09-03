@@ -24,6 +24,7 @@ use panic_rtt_core::rprintln;
 
 use shared_bus::{BusManager, BusProxy, CortexMBusManager};
 use stm32f4xx_hal::timer::{PinC3, PinC4};
+use stm32f4xx_hal::dwt::{Dwt,DwtExt};
 
 /// Initialize peripherals for PX4FLOW.
 /// PX4FLOW v2.3 chip is [STM32F407VGT6](https://www.mouser.com/datasheet/2/389/dm00037051-1797298.pdf)
@@ -31,6 +32,7 @@ pub fn setup_peripherals() -> (
     //  user LEDs:
     (LedOutputActivity, LedOutputComm, LedOutputError),
     DelaySource,
+    Dwt,
     I2c1Port,
     I2c2Port,
     Spi2Port,
@@ -57,6 +59,7 @@ pub fn setup_peripherals() -> (
         .freeze();
 
     let mut delay_source = p_hal::delay::Delay::new(cp.SYST, clocks);
+    let dwt = cp.DWT.constrain(cp.DCB, clocks);
 
     //enable DCMI and DMA clocks before configuring their pins
     let rcc2 = unsafe { &(*RCC::ptr()) };
@@ -74,6 +77,7 @@ pub fn setup_peripherals() -> (
     let gpioc = dp.GPIOC.split();
     let gpiod = dp.GPIOD.split();
     let gpioe = dp.GPIOE.split();
+
 
     //activity LED
     #[cfg(feature = "breakout")]
@@ -297,6 +301,7 @@ pub fn setup_peripherals() -> (
     (
         (user_led0, user_led1, user_led2),
         delay_source,
+        dwt,
         i2c1_port,
         i2c2_port,
         spi2_port,

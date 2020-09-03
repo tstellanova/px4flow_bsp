@@ -104,10 +104,15 @@ fn main() -> ! {
         dcmi_wrap.enable_capture(&board.dma2);
     }
 
+    let mut stopwatch_buf = [0u32; 16];
+    let mut stopwatch = board.dwt.stopwatch(&mut stopwatch_buf);
+    let mut tracker: SensorValueTracker<f32> = SensorValueTracker::new(0.1);
+
     let frame_start_x = (MAX_WIDTH_BIN4 - SQ_DIM_64) / 2;
     let frame_start_y = (MAX_HEIGHT_BIN4 - SQ_DIM_64) / 2;
     let mut img_count: u32 = 0;
     let mut flow_img_idx = 0;
+
     loop {
         for _ in 0..10 {
             // read the gyro
@@ -136,8 +141,16 @@ fn main() -> ! {
                         let prior_flow_image = fast_sq64_img_bufs[flow_img_idx].as_ref();
 
                         let (dx, dy) = correlator.measure_translation(cur_flow_image, prior_flow_image);
+
+                        stopwatch.lap();
+                        if stopwatch.lap_count() > 0 {
+                            if let Some(lap_time) = stopwatch.lap_time(1) {
+                                tracker.update(lap_time.as_secs_f32());
+                            }
+                            stopwatch.reset();
+                        }
                         if (dx.abs() > 0) || (dy.abs() > 0) {
-                            rprintln!("{} ({}, {})", img_count, dx, dy);
+                            rprintln!("{} ({}, {}) {} ", img_count, dx, dy, tracker.average());
                         }
 
                         if (dx + dy) >= 63 {
@@ -145,9 +158,9 @@ fn main() -> ! {
                             dump_pixels(img_count, cur_flow_image );
                             rprintln!("\n---");
                         }
-
                         let _ = board.comms_led.toggle();
                         img_count += 1;
+
                     }
                 }
             }
@@ -174,5 +187,101 @@ fn dump_pixels(image_count: u32, buf: &[u8]) {
         );
         rprint!("{}", wrapper);
         read_idx += CHUNK_SIZE;
+    }
+}
+
+use num_traits::Float;
+
+/// Implements exponential weighted moving average of sensor readings,
+/// including exponentially fading minimum and maximum
+pub struct SensorValueTracker<T>
+    where T: Copy + Clone + PartialEq
+{
+    /// recent minimum value (not global minimum)
+    local_min: T,
+    /// recent maximum value (not global maximum)
+    local_max: T,
+    /// exponentially weighted moving average
+    average: T,
+    /// weighting factor-- bigger alpha causes faster fade of old values
+    alpha: T,
+    /// Previous value (used for exponential smoothing)
+    prev_value: T,
+}
+
+impl<T> SensorValueTracker<T>
+    where
+        T: Float + Clone + Copy  + PartialEq
+{
+
+
+    pub fn new(alpha: T) -> Self {
+        Self {
+            local_min: T::nan(),
+            local_max: T::nan(),
+            average: T::nan(),
+            alpha,
+            prev_value: T::nan(),
+        }
+    }
+
+    pub fn average(&self) -> T {
+        self.average
+    }
+
+    pub fn normalize(&self, val: T) -> T {
+        val / self.range()
+    }
+
+    pub fn range(&self) -> T {
+        let mut range = self.local_max - self.local_min;
+        if range == T::zero() {
+            range = T::one();
+        }
+
+        if range < T::zero() {
+            -range
+        } else {
+            range
+        }
+    }
+
+    /// Returns (smooth value, average value)
+    pub fn update(&mut self, new_value: T) -> (T, T) {
+        //seed the EMWA with the initial value
+        if self.local_min.is_nan() {
+            self.local_min = new_value;
+        }
+        if self.local_max.is_nan() {
+            self.local_max = new_value;
+        }
+        if self.average.is_nan() {
+            self.average = new_value;
+        }
+        if self.prev_value.is_nan() {
+            self.prev_value = new_value;
+        }
+
+        let smooth_val = (self.alpha * new_value)
+            + (T::one() - self.alpha) * self.prev_value;
+        self.average =
+            (self.alpha * new_value) + (T::one() - self.alpha) * self.average;
+        self.prev_value = smooth_val;
+
+        // extrema fade toward average
+        if new_value > self.local_max {
+            self.local_max = new_value;
+        } else if new_value > self.average {
+            self.local_max = (self.alpha * new_value)
+                + (T::one() - self.alpha) * self.local_max;
+        }
+        if new_value < self.local_min {
+            self.local_min = new_value;
+        } else if new_value < self.average {
+            self.local_min = (self.alpha * new_value)
+                + (T::one() - self.alpha) * self.local_min;
+        }
+
+        (self.prev_value, self.average)
     }
 }
