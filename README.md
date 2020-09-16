@@ -2,10 +2,31 @@
 
 Rust no_std embedded hal board support package for the PX4FLOW optical flow sensor hardware.
 
-## Usage
 
-See the [example](./examples/play.rs) to an example that has been tested with
-the PX4FLOW hardware. 
+## Embedded Examples
+The examples are designed to be used with a debug probe that supports J-Link / RTT.
+We provide a couple different ways to run these:
+- With the Segger tools  (This is currently the default.)
+- With [probe-run](https://crates.io/crates/probe-run) (This is WIP and may not work as expected.)
+
+
+#### With the Segger tools installed 
+- Edit [config](.cargo/config) to select the `segger.gdb` runner
+- In one shell run: `./start_gdb_server_jlink.sh`
+- In another shell run: `JLinkRTTClient`
+- Then run your choice of examples
+
+#### With probe-run installed
+- Edit [config](.cargo/config) to select the `probe-run` runner
+- Run the example (see below) with a JLink debug probe attached to your PX4FLOW
+- Note that RTT output to the terminal may be significantly slower than with the Segger tools.
+
+### Running examples
+
+```shell script
+cargo run  --example play --features  rttdebug
+```
+
 
 ### Interrupt Handling
 
@@ -36,15 +57,6 @@ This assumes you are using the [cortex-m-rt crate](https://crates.io/crates/cort
 to construct your embedded application, and using its `#[interrupt]` to handle interrupts.
 
 
-## Examples
-
-The examples are designed to run on the px4flow using jlink:
-
-- In one shell run: `./start_gdb_server_jlink.sh`
-- In another shell run `JLinkRTTClient`
-
-- Then build and start an example such as `cargo run --example play --release --features "rttdebug" `
-
 ## Status
 
 Work in progress
@@ -59,15 +71,16 @@ Work in progress
 - [x] Initial setup of DCMI peripheral
 - [x] Initial setup of DMA2 
 - [x] Mostly working DCMI->DMA2-> image buffer pipeline
+- [x] Support for running examples using probe-run
+- [ ] Support use of 120x120 flow frame (bin 4 of 480 height)
 - [ ] Support configurable / full-frame image buffers (currently limited to 64x64)
 - [ ] Support use of full 10 bpp grayscale resolution of MT9V034
-- [ ] Support use of 120x120 flow frame (bin 4 of 480 height)
 
 ## Notes
 - The only supported mode for debugging is RTT with the `rttdebug` feature. This is because 
 the PX4FLOW 1.x and 2.x boards only make the SWD interface available (no easy ITM solution).
 - The `breakout` feature is intended for library development and debugging purposes.
-Currently it's setup to work with the "DevEBox STM32F4XX_M Ver:3.0" board, which does not
+Currently it's setup to work with the "DevEBox STM32F4XX_M Ver:3.0" board (STM32F407VGT6), which does not
 include a l3gd20 gyro or eeprom, and eg the Arducam MT9V034 breakout board ("UC-396 RevA")
 - This has been tested with the CUAV PX4FLOW v2.3. On this particular board, the 
 SWD and SWCLK pads noted on the bottom of the board appear to be swapped

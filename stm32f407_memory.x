@@ -1,4 +1,4 @@
-/* Memory layout for stm32f407 */
+/* Memory layout for stm32f407vgt6 */
 MEMORY
 {
   /* NOTE K = 1024 bytes */
@@ -16,6 +16,7 @@ MEMORY
 
 SECTIONS
 {
+  /* tap into the core-coupled RAM for faster processing */
     .ccmram (NOLOAD) : ALIGN(4)
     {
         *(.ccmram .ccmram.*);
