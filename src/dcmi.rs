@@ -22,11 +22,15 @@ pub const SQ_64_PIX_COUNT: usize = SQ_DIM_64 * SQ_DIM_64;
 pub const SQ_120_PIX_COUNT: usize = SQ_DIM_120 * SQ_DIM_120;
 pub const MAX_WIDTH_BIN4: usize = 188;
 pub const MAX_HEIGHT_BIN4: usize = 120;
+pub const DEFAULT_IMG_WIDTH: usize = MAX_WIDTH_BIN4;
+pub const DEFAULT_IMG_HEIGHT: usize = MAX_HEIGHT_BIN4;
+
 pub const MT9V034_MAX_PIX_COUNT: usize = 752 * 480;
 /// Count of pixels in bin4 image (column and row bin 4)
 pub const MT9V034_BIN4_PIX_COUNT: usize = MAX_WIDTH_BIN4 * MAX_HEIGHT_BIN4;
 
 //TODO frame buffer sizes assume 8 bits per pixel currently
+pub const DEFAULT_BITS_PER_PIXEL: u8 = 8;
 
 /// Minimal square frame buffer with binning four: 64x64 pixels
 pub const SQ64_FRAME_BUF_LEN: usize = SQ_64_PIX_COUNT;
@@ -81,7 +85,7 @@ static mut IMG_BUF2: ImageFrameBuf = [0u8; FRAME_BUF_LEN];
 impl DcmiWrapper<'_> {
     /// New wrapper ready for DCMI with a 64x64, 8 bits per pixel capture
     pub fn default(dcmi: pac::DCMI) -> Self {
-        Self::new(dcmi, MAX_WIDTH_BIN4, MAX_HEIGHT_BIN4, 8)
+        Self::new(dcmi, DEFAULT_IMG_WIDTH, DEFAULT_IMG_HEIGHT, DEFAULT_BITS_PER_PIXEL)
     }
 
     /// Create a new DcmiWrapper with configured frame dimensions

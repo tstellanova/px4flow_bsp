@@ -19,9 +19,10 @@ use mt9v034_i2c::{BinningFactor, Mt9v034, ParamContext};
 use core::sync::atomic::{AtomicPtr, Ordering};
 use cortex_m::singleton;
 
-use crate::dcmi::{DcmiWrapper, SQ_DIM_120};
+use crate::dcmi::{DcmiWrapper, SQ_DIM_120, SQ_DIM_64};
 #[cfg(feature = "rttdebug")]
 use panic_rtt_core::rprintln;
+use stm32f4xx_hal::dwt::StopWatch;
 
 /// The main Board support type:
 /// This contains both pre-initialized drivers for
@@ -42,6 +43,8 @@ pub struct Board<'a> {
     pub usart2: Usart2Port,
     pub usart3: Usart3Port,
     pub uart4: Uart4Port,
+
+    stopwatch: StopWatch<'a>,
 }
 
 impl Default for Board<'_> {
@@ -69,6 +72,10 @@ impl Default for Board<'_> {
         //We are safe to forget the DCMI pins after configuration
         core::mem::forget(dcmi_ctrl_pins);
         core::mem::forget(dcmi_data_pins);
+
+
+        static mut STOPWATCH_BUF: [u32; 2] = [0u32; 2];
+        let mut stopwatch = dwt.stopwatch(unsafe { &mut STOPWATCH_BUF });
 
         // Since any number of devices could sit on the external i2c1 port,
         //  we should treat it as a shared bus
@@ -121,9 +128,9 @@ impl Default for Board<'_> {
             let eeprom_opt = Some(eeprom);
         }
 
-        // option A: select Context A with row and column bin 4 (188x120)
+        // option A: select max aspect ration with row and column bin 4 (188x120)
         let mut dcmi_wrap = DcmiWrapper::default(dcmi);
-        // option B: select Context B with square-120 images
+        // option B: square-120 images
         // let mut dcmi_wrap = DcmiWrapper::new(dcmi, SQ_DIM_120, SQ_DIM_120, 8);
 
         dcmi_wrap.setup(&dma2);
@@ -145,6 +152,7 @@ impl Default for Board<'_> {
         const WINDOW_W_B: u16 = 752;
         const WINDOW_H_B: u16 = 480;
 
+
         cam_config
             .setup_with_dimensions(
                 WINDOW_W_A,
@@ -162,7 +170,7 @@ impl Default for Board<'_> {
         // Note that we do not call dcmi_wrap.enable_capture() here --
         // instead we allow the board user to do that if desired.
 
-        Self {
+        let mut result = Self {
             activity_led: raw_user_leds.0,
             comms_led: raw_user_leds.1,
             error_led: raw_user_leds.2,
@@ -177,15 +185,32 @@ impl Default for Board<'_> {
             usart3,
             uart4,
             dwt,
-        }
+            stopwatch
+        };
+
+        result
     }
 }
+
 
 impl Board<'_> {
     /// Call this on the DMA2_STREAM1 interrupt
     pub fn handle_dma2_stream1_interrupt(&mut self) {
         if let Some(dcmi_wrap) = self.dcmi_wrap.as_mut() {
             dcmi_wrap.dma2_stream1_irqhandler();
+
+            #[cfg(feature = "rttdebug")]
+            {
+                self.stopwatch.lap();
+                if let Some(period) = self.stopwatch.lap_time(1) {
+                    let unread = dcmi_wrap.unread_frames();
+                    let period_secs = period.as_secs_f32();
+                    // if (period_secs > 0.03) || (unread > 1) {
+                    //     rprintln!("dma {:.5} {}", period.as_secs_f32(), dcmi_wrap.unread_frames());
+                    // }
+                }
+                self.stopwatch.reset();
+            }
         }
     }
 
@@ -226,3 +251,5 @@ pub type EepromType<'a> = eeprom24x::Eeprom24x<
 
 /// Concrete type for camera configuration driver
 pub type CameraConfigType<'a> = Mt9v034<I2c2BusProxy<'a>>;
+
+
